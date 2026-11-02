@@ -1080,8 +1080,20 @@ async function handleFormSubmit(form) {
 }
 
 /* ---------------- التهيئة ---------------- */
+function hydrateStaticIcons() {
+  document.querySelectorAll('[data-icon]').forEach((placeholder) => {
+    const name = placeholder.dataset.icon;
+    let size = 18;
+    if (placeholder.closest('.primary-btn')) size = 16;
+    else if (placeholder.closest('.ghost-btn')) size = 15;
+    placeholder.innerHTML = icon(name, size);
+    placeholder.removeAttribute('data-icon');
+  });
+}
+
 async function initApp() {
   try {
+    hydrateStaticIcons();
     const status = await DB.open();
     state.dbMode = status.mode;
     state.dbError = status.error;
@@ -1100,7 +1112,15 @@ async function initApp() {
     setTimeout(() => dom.loading.classList.add('is-done'), 300);
 
     if ('serviceWorker' in navigator && /^https?:$/.test(window.location.protocol)) {
-      navigator.serviceWorker.register('sw.js').then(() => {
+      const hadController = Boolean(navigator.serviceWorker.controller);
+      let refreshing = false;
+      navigator.serviceWorker.addEventListener('controllerchange', () => {
+        if (!hadController || refreshing) return;
+        refreshing = true;
+        window.location.reload();
+      });
+      navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).then((registration) => {
+        registration.update().catch(() => {});
         console.info('[نظامي] Service Worker جاهز');
       }).catch((error) => {
         console.warn('[نظامي] تعذر تسجيل Service Worker', error);
