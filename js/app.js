@@ -32,6 +32,7 @@ const PAGE_INFO = {
   sleep: { title: 'النوم', subtitle: 'متابعة وإحصائيات دقيقة لراحة أفضل' },
   reminders: { title: 'التذكيرات', subtitle: 'لا تفوت أي شيء مع التنبيهات' },
   activity: { title: 'سجل النشاط', subtitle: 'تاريخ كامل لعملياتك محفوظ حتى بعد الحذف' },
+  finance: { title: 'ماليّاتي', subtitle: 'حساباتك ودخلك ومصروفاتك والتزاماتك وادخارك في مكان واحد' },
   settings: { title: 'الإعدادات', subtitle: 'ضبط التطبيق ونسخ احتياطي' }
 };
 
@@ -331,6 +332,8 @@ function openQuickAdd() {
       <button class="quick-menu-item" data-qa="goal"><div class="quick-menu-icon purple">${icon('target', 16)}</div><span>إضافة هدف جديد</span><div class="spacer"></div>${icon('arrow-right', 14)}</button>
       <button class="quick-menu-item" data-qa="sleep"><div class="quick-menu-icon purple">${icon('moon', 16)}</div><span>تسجيل نوم / قيلولة</span><div class="spacer"></div>${icon('arrow-right', 14)}</button>
       <button class="quick-menu-item" data-qa="reminder"><div class="quick-menu-icon warning">${icon('bell', 16)}</div><span>إضافة تذكير</span><div class="spacer"></div>${icon('arrow-right', 14)}</button>
+      <button class="quick-menu-item" data-qa="finance-expense"><div class="quick-menu-icon green">${icon('receipt', 16)}</div><span>تسجيل مصروف</span><div class="spacer"></div>${icon('arrow-right', 14)}</button>
+      <button class="quick-menu-item" data-qa="finance-income"><div class="quick-menu-icon blue">${icon('arrow-down-left', 16)}</div><span>تسجيل دخل / راتب</span><div class="spacer"></div>${icon('arrow-right', 14)}</button>
     </div>
   `;
   const close = () => overlay.remove();
@@ -344,6 +347,18 @@ function openQuickAdd() {
       if (action === 'goal') openGoalModal();
       if (action === 'sleep') openSleepModal();
       if (action === 'reminder') openReminderModal();
+      if (action === 'finance-expense') {
+        if (typeof financeIsLocked === 'function' && financeIsLocked()) {
+          navigate('finance');
+          showToast({ type: 'warning', title: 'ماليّاتي مقفل', message: 'أدخل رمز PIN أولًا' });
+        } else openFinanceExpenseModal();
+      }
+      if (action === 'finance-income') {
+        if (typeof financeIsLocked === 'function' && financeIsLocked()) {
+          navigate('finance');
+          showToast({ type: 'warning', title: 'ماليّاتي مقفل', message: 'أدخل رمز PIN أولًا' });
+        } else openFinanceIncomeModal();
+      }
     });
   });
   dom.quickRoot.appendChild(overlay);
@@ -793,7 +808,7 @@ function bindGlobalEvents() {
           break;
         }
         case 'calendar-all-filters':
-          state.ui.calendarFilters = new Set(['tasks', 'habits', 'reminders', 'sleep', 'prayer']);
+          state.ui.calendarFilters = new Set(['tasks', 'habits', 'reminders', 'sleep', 'prayer', 'finance']);
           renderCalendar();
           break;
         case 'calendar-day': openDayDetails(date); break;
@@ -1282,6 +1297,7 @@ async function initApp() {
     startReminderChecker();
     if (typeof initPrayer === 'function') initPrayer();
     if (typeof initAdhanLibrary === 'function') initAdhanLibrary();
+    if (typeof initFinance === 'function') await initFinance();
 
     dom.shell.hidden = false;
     navigate('dashboard');

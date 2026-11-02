@@ -6,7 +6,7 @@
    ========================================================= */
 'use strict';
 
-const CACHE_NAME = 'nizami-shell-v5';
+const CACHE_NAME = 'nizami-shell-v6';
 const APP_SHELL = [
   './',
   './index.html',
@@ -14,12 +14,14 @@ const APP_SHELL = [
   './js/utils.js',
   './js/db.js',
   './js/store.js',
+  './js/finance.js',
   './js/vendor/adhan.umd.min.js',
   './js/prayer.js',
   './js/adhan-library.js',
   './js/views.js',
   './js/views-extra.js',
   './js/views-prayer.js',
+  './js/finance-views.js',
   './js/modals.js',
   './js/app.js',
   './assets/icon.svg',

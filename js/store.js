@@ -11,6 +11,7 @@ const DEFAULT_SETTINGS = {
   notificationsAsked: false,
   notificationsEnabled: false,
   prayer: null,
+  finance: null,
   createdAt: Date.now(),
   schemaVersion: SCHEMA_VERSION
 };
@@ -30,13 +31,25 @@ const state = {
     reminders: [],
     prayerLogs: [],
     adhanLibrary: [],
-    activity: []
+    activity: [],
+    financeAccounts: [],
+    financeCategories: [],
+    financeTransactions: [],
+    financeObligations: [],
+    financeObligationPayments: [],
+    financeDebts: [],
+    financeDebtPayments: [],
+    financeSavingsGoals: [],
+    financeSavingsEntries: [],
+    financeBudgets: [],
+    financeIncomeSchedules: [],
+    financeAttachments: []
   },
   settings: { ...DEFAULT_SETTINGS },
   ui: {
     calendarMode: 'month',
     calendarCursor: todayISO(),
-    calendarFilters: new Set(['tasks', 'habits', 'reminders', 'sleep', 'prayer']),
+    calendarFilters: new Set(['tasks', 'habits', 'reminders', 'sleep', 'prayer', 'finance']),
     prayerDate: null,
     prayerStatsDays: 7,
     sleepChartDays: 7,
@@ -54,6 +67,19 @@ const state = {
     activityFrom: '',
     activityTo: '',
     activityLimit: 80,
+    financeTab: 'dashboard',
+    financeAccount: 'all',
+    financeScope: 'all',
+    financePeriod: 'month',
+    financeFrom: '',
+    financeTo: '',
+    financeQuery: '',
+    financeType: 'all',
+    financeCategoryFilter: 'all',
+    financePaymentFilter: 'all',
+    financeLocked: true,
+    financeCursor: todayISO(),
+    financeReportTab: 'overview',
     sidebarOpen: false
   }
 };
@@ -69,6 +95,18 @@ const STORE_PROP = {
   prayer_logs: 'prayerLogs',
   adhan_library: 'adhanLibrary',
   activity_logs: 'activity',
+  finance_accounts: 'financeAccounts',
+  finance_categories: 'financeCategories',
+  finance_transactions: 'financeTransactions',
+  finance_obligations: 'financeObligations',
+  finance_obligation_payments: 'financeObligationPayments',
+  finance_debts: 'financeDebts',
+  finance_debt_payments: 'financeDebtPayments',
+  finance_savings_goals: 'financeSavingsGoals',
+  finance_savings_entries: 'financeSavingsEntries',
+  finance_budgets: 'financeBudgets',
+  finance_income_schedules: 'financeIncomeSchedules',
+  finance_attachments: 'financeAttachments',
   settings: 'settings'
 };
 
@@ -101,7 +139,12 @@ async function loadStore(storeName) {
 }
 
 async function loadAllData() {
-  const [habits, habitLogs, tasks, goals, milestones, sleep, reminders, prayerLogs, adhanLibrary, activity, settingsRecord] = await Promise.all([
+  const [
+    habits, habitLogs, tasks, goals, milestones, sleep, reminders, prayerLogs, adhanLibrary, activity,
+    financeAccounts, financeCategories, financeTransactions, financeObligations, financeObligationPayments,
+    financeDebts, financeDebtPayments, financeSavingsGoals, financeSavingsEntries, financeBudgets,
+    financeIncomeSchedules, financeAttachments, settingsRecord
+  ] = await Promise.all([
     DB.getAll('habits'),
     DB.getAll('habit_logs'),
     DB.getAll('tasks'),
@@ -112,6 +155,18 @@ async function loadAllData() {
     DB.getAll('prayer_logs'),
     DB.getAll('adhan_library'),
     DB.getAll('activity_logs'),
+    DB.getAll('finance_accounts'),
+    DB.getAll('finance_categories'),
+    DB.getAll('finance_transactions'),
+    DB.getAll('finance_obligations'),
+    DB.getAll('finance_obligation_payments'),
+    DB.getAll('finance_debts'),
+    DB.getAll('finance_debt_payments'),
+    DB.getAll('finance_savings_goals'),
+    DB.getAll('finance_savings_entries'),
+    DB.getAll('finance_budgets'),
+    DB.getAll('finance_income_schedules'),
+    DB.getAll('finance_attachments'),
     DB.get('settings', 'general')
   ]);
 
@@ -125,6 +180,18 @@ async function loadAllData() {
   state.data.prayerLogs = prayerLogs;
   state.data.adhanLibrary = adhanLibrary;
   state.data.activity = sortBy(activity, (a) => a.timestamp, 'desc');
+  state.data.financeAccounts = financeAccounts;
+  state.data.financeCategories = financeCategories;
+  state.data.financeTransactions = financeTransactions;
+  state.data.financeObligations = financeObligations;
+  state.data.financeObligationPayments = financeObligationPayments;
+  state.data.financeDebts = financeDebts;
+  state.data.financeDebtPayments = financeDebtPayments;
+  state.data.financeSavingsGoals = financeSavingsGoals;
+  state.data.financeSavingsEntries = financeSavingsEntries;
+  state.data.financeBudgets = financeBudgets;
+  state.data.financeIncomeSchedules = financeIncomeSchedules;
+  state.data.financeAttachments = financeAttachments;
 
   if (settingsRecord && settingsRecord.value && typeof settingsRecord.value === 'object') {
     state.settings = { ...DEFAULT_SETTINGS, ...settingsRecord.value };
@@ -134,6 +201,9 @@ async function loadAllData() {
   }
   if (typeof normalizePrayerSettings === 'function') {
     state.settings.prayer = normalizePrayerSettings(state.settings.prayer);
+  }
+  if (typeof normalizeFinanceSettings === 'function') {
+    state.settings.finance = normalizeFinanceSettings(state.settings.finance);
   }
   state.settings.schemaVersion = SCHEMA_VERSION;
   state.dbMode = DB.mode();
@@ -1011,13 +1081,23 @@ async function resetAllData() {
   await DB.clearAll();
   state.data = {
     habits: [], habitLogs: [], tasks: [], goals: [], milestones: [],
-    sleep: [], reminders: [], prayerLogs: [], adhanLibrary: [], activity: []
+    sleep: [], reminders: [], prayerLogs: [], adhanLibrary: [], activity: [],
+    financeAccounts: [], financeCategories: [], financeTransactions: [],
+    financeObligations: [], financeObligationPayments: [], financeDebts: [],
+    financeDebtPayments: [], financeSavingsGoals: [], financeSavingsEntries: [],
+    financeBudgets: [], financeIncomeSchedules: [], financeAttachments: []
   };
   state.settings = { ...DEFAULT_SETTINGS };
   if (typeof normalizePrayerSettings === 'function') {
     state.settings.prayer = normalizePrayerSettings(null);
   }
+  if (typeof normalizeFinanceSettings === 'function') {
+    state.settings.finance = normalizeFinanceSettings(null);
+  }
   await DB.put('settings', { key: 'general', value: { ...state.settings } });
+  if (typeof ensureFinanceSeed === 'function') {
+    await ensureFinanceSeed();
+  }
 }
 
 async function reloadEverything() {

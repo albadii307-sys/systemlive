@@ -46,7 +46,19 @@ const ENTITY_LABELS = {
   reminder: 'تذكير',
   prayer: 'صلاة',
   adhan_audio: 'صوت أذان',
-  settings: 'إعدادات'
+  settings: 'إعدادات',
+  finance_account: 'حساب مالي',
+  finance_category: 'تصنيف مالي',
+  finance_transaction: 'معاملة مالية',
+  finance_obligation: 'التزام/قسط',
+  finance_obligation_payment: 'سداد التزام',
+  finance_debt: 'دين',
+  finance_debt_payment: 'سداد دين',
+  finance_savings_goal: 'هدف ادخار',
+  finance_savings_entry: 'حركة ادخار',
+  finance_budget: 'ميزانية',
+  finance_income_schedule: 'جدول راتب',
+  finance_settings: 'إعدادات مالية'
 };
 const ACTIVITY_COLORS = {
   create: 'green',
@@ -58,7 +70,11 @@ const ACTIVITY_COLORS = {
   pause: 'warning',
   resume: 'blue',
   progress: 'purple',
-  download: 'blue'
+  download: 'blue',
+  pay: 'green',
+  transfer: 'blue',
+  receive: 'green',
+  lock: 'warning'
 };
 const PRAYER_ACTIVITY_TYPES = ['prayer'];
 
@@ -129,7 +145,19 @@ const ICON_PATHS = {
   volume: '<path d="M11 5 6 9H2v6h4l5 4Z"/><path d="M15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13"/>',
   'volume-x': '<path d="M11 5 6 9H2v6h4l5 4Z"/><path d="m16 9 5 6M21 9l-5 6"/>',
   mosque: '<path d="M4 21V11l8-6 8 6v10"/><path d="M9 21v-6a3 3 0 0 1 6 0v6"/><path d="M2 21h20M12 5V3"/>',
-  compass: '<circle cx="12" cy="12" r="9"/><path d="m16 8-2.5 5.5L8 16l2.5-5.5Z"/>'
+  compass: '<circle cx="12" cy="12" r="9"/><path d="m16 8-2.5 5.5L8 16l2.5-5.5Z"/>',
+  lock: '<rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/><path d="M12 15v2"/>',
+  unlock: '<rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 7.5-2"/><path d="M12 15v2"/>',
+  bank: '<path d="M3 10 12 3l9 7"/><path d="M5 10v11M19 10v11M9 21v-6h6v6"/><path d="M2 21h20"/>',
+  'credit-card': '<rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/><path d="M6 15h4"/>',
+  receipt: '<path d="M5 3h14v18l-3-2-2 2-2-2-2 2-2-2-3 2Z"/><path d="M9 8h6M9 12h6"/>',
+  'piggy-bank': '<path d="M19 9c1.2 1 2 2.4 2 4 0 1.2-.4 2.3-1 3.2V19a1 1 0 0 1-1 1h-2v-2H9v2H7a1 1 0 0 1-1-1v-1.5A5 5 0 0 1 4 13c0-3.3 2.7-6 6-6h5l2-3v5Z"/><path d="M15 9h.01"/><path d="M8 7V4"/>',
+  scale: '<path d="M12 3v18M7 21h10"/><path d="M5 7h14"/><path d="m5 7-3 7h6Z"/><path d="m19 7-3 7h6Z"/>',
+  shield: '<path d="M12 3 20 6v6c0 5-3.4 8.4-8 10-4.6-1.6-8-5-8-10V6Z"/><path d="m9 12 2 2 4-4"/>',
+  'file-text': '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/><path d="M8 13h8M8 17h5"/>',
+  percent: '<path d="m19 5-14 14"/><circle cx="7" cy="7" r="2.5"/><circle cx="17" cy="17" r="2.5"/>',
+  'arrow-down-left': '<path d="M17 7 7 17M17 17H7V7"/>',
+  'arrow-up-right': '<path d="M7 17 17 7M7 7h10v10"/>'
 };
 
 function icon(name, size = 18) {

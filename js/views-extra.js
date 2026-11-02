@@ -85,6 +85,10 @@ function calendarEventsBetween(startDate, endDate) {
     events.push(...prayerCalendarEvents(startDate, endDate));
   }
 
+  if (filters.has('finance') && typeof financeCalendarEvents === 'function' && !financeIsLocked()) {
+    events.push(...financeCalendarEvents(startDate, endDate));
+  }
+
   if (filters.has('sleep')) {
     for (const record of state.data.sleep) {
       if (record.startDate >= startDate && record.startDate <= endDate) {
@@ -158,7 +162,7 @@ function renderCalendar() {
   }
 
   const modeLabels = [['month', 'شهري'], ['week', 'أسبوعي'], ['day', 'يومي']];
-  const filterLabels = [['tasks', 'المهام'], ['prayer', 'الصلاة'], ['habits', 'العادات'], ['reminders', 'التذكيرات'], ['sleep', 'النوم']];
+  const filterLabels = [['tasks', 'المهام'], ['prayer', 'الصلاة'], ['habits', 'العادات'], ['reminders', 'التذكيرات'], ['sleep', 'النوم'], ['finance', 'ماليّاتي']];
 
   dom.view.innerHTML = `
     <div class="view-fade">
@@ -197,6 +201,7 @@ function renderCalendar() {
         <span><i style="background:var(--accent)"></i> إنجازات عادات</span>
         <span><i style="background:var(--warning)"></i> تذكيرات</span>
         <span><i style="background:var(--purple)"></i> نوم واستيقاظ</span>
+        <span><i style="background:var(--green)"></i> التزامات مالية</span>
         <span class="spacer"></span>
         <span>اضغط على أي يوم لعرض التفاصيل والإضافة</span>
       </div>

@@ -5,8 +5,8 @@
 'use strict';
 
 const DB_NAME = 'nizami_db';
-const DB_VERSION = 3;
-const SCHEMA_VERSION = 3;
+const DB_VERSION = 4;
+const SCHEMA_VERSION = 4;
 const FALLBACK_KEY = 'nizami_fallback_v1';
 
 const STORE_DEFS = {
@@ -101,6 +101,114 @@ const STORE_DEFS = {
   settings: {
     keyPath: 'key',
     indexes: []
+  },
+  finance_accounts: {
+    keyPath: 'id',
+    indexes: [
+      ['type', 'type', {}],
+      ['archived', 'archived', {}],
+      ['createdAt', 'createdAt', {}]
+    ]
+  },
+  finance_categories: {
+    keyPath: 'id',
+    indexes: [
+      ['type', 'type', {}],
+      ['parentId', 'parentId', {}],
+      ['createdAt', 'createdAt', {}]
+    ]
+  },
+  finance_transactions: {
+    keyPath: 'id',
+    indexes: [
+      ['accountId', 'accountId', {}],
+      ['toAccountId', 'toAccountId', {}],
+      ['type', 'type', {}],
+      ['categoryId', 'categoryId', {}],
+      ['date', 'date', {}],
+      ['datetime', 'datetime', {}],
+      ['obligationId', 'obligationId', {}],
+      ['debtId', 'debtId', {}],
+      ['savingsGoalId', 'savingsGoalId', {}],
+      ['linkedGroupId', 'linkedGroupId', {}],
+      ['createdAt', 'createdAt', {}]
+    ]
+  },
+  finance_obligations: {
+    keyPath: 'id',
+    indexes: [
+      ['accountId', 'accountId', {}],
+      ['status', 'status', {}],
+      ['dueDate', 'dueDate', {}],
+      ['type', 'type', {}],
+      ['createdAt', 'createdAt', {}]
+    ]
+  },
+  finance_obligation_payments: {
+    keyPath: 'id',
+    indexes: [
+      ['obligationId', 'obligationId', {}],
+      ['transactionId', 'transactionId', {}],
+      ['date', 'date', {}]
+    ]
+  },
+  finance_debts: {
+    keyPath: 'id',
+    indexes: [
+      ['status', 'status', {}],
+      ['dueDate', 'dueDate', {}],
+      ['createdAt', 'createdAt', {}]
+    ]
+  },
+  finance_debt_payments: {
+    keyPath: 'id',
+    indexes: [
+      ['debtId', 'debtId', {}],
+      ['transactionId', 'transactionId', {}],
+      ['date', 'date', {}]
+    ]
+  },
+  finance_savings_goals: {
+    keyPath: 'id',
+    indexes: [
+      ['accountId', 'accountId', {}],
+      ['status', 'status', {}],
+      ['targetDate', 'targetDate', {}],
+      ['createdAt', 'createdAt', {}]
+    ]
+  },
+  finance_savings_entries: {
+    keyPath: 'id',
+    indexes: [
+      ['goalId', 'goalId', {}],
+      ['transactionId', 'transactionId', {}],
+      ['date', 'date', {}],
+      ['type', 'type', {}]
+    ]
+  },
+  finance_budgets: {
+    keyPath: 'id',
+    indexes: [
+      ['scope', 'scope', {}],
+      ['period', 'period', {}],
+      ['accountType', 'accountType', {}],
+      ['categoryId', 'categoryId', {}]
+    ]
+  },
+  finance_income_schedules: {
+    keyPath: 'id',
+    indexes: [
+      ['accountId', 'accountId', {}],
+      ['enabled', 'enabled', {}],
+      ['dayOfMonth', 'dayOfMonth', {}]
+    ]
+  },
+  finance_attachments: {
+    keyPath: 'id',
+    indexes: [
+      ['transactionId', 'transactionId', {}],
+      ['addedAt', 'addedAt', {}]
+    ]
   }
 };
 
@@ -112,7 +220,19 @@ const CAMEL_TO_STORE = {
   sleepRecords: 'sleep_records',
   activityLogs: 'activity_logs',
   prayerLogs: 'prayer_logs',
-  adhanLibrary: 'adhan_library'
+  adhanLibrary: 'adhan_library',
+  financeAccounts: 'finance_accounts',
+  financeCategories: 'finance_categories',
+  financeTransactions: 'finance_transactions',
+  financeObligations: 'finance_obligations',
+  financeObligationPayments: 'finance_obligation_payments',
+  financeDebts: 'finance_debts',
+  financeDebtPayments: 'finance_debt_payments',
+  financeSavingsGoals: 'finance_savings_goals',
+  financeSavingsEntries: 'finance_savings_entries',
+  financeBudgets: 'finance_budgets',
+  financeIncomeSchedules: 'finance_income_schedules',
+  financeAttachments: 'finance_attachments'
 };
 const STORE_TO_CAMEL = {
   habit_logs: 'habitLogs',
@@ -120,12 +240,24 @@ const STORE_TO_CAMEL = {
   sleep_records: 'sleepRecords',
   activity_logs: 'activityLogs',
   prayer_logs: 'prayerLogs',
-  adhan_library: 'adhanLibrary'
+  adhan_library: 'adhanLibrary',
+  finance_accounts: 'financeAccounts',
+  finance_categories: 'financeCategories',
+  finance_transactions: 'financeTransactions',
+  finance_obligations: 'financeObligations',
+  finance_obligation_payments: 'financeObligationPayments',
+  finance_debts: 'financeDebts',
+  finance_debt_payments: 'financeDebtPayments',
+  finance_savings_goals: 'financeSavingsGoals',
+  finance_savings_entries: 'financeSavingsEntries',
+  finance_budgets: 'financeBudgets',
+  finance_income_schedules: 'financeIncomeSchedules',
+  finance_attachments: 'financeAttachments'
 };
 
-// ملفات الصوت تُستثنى من النسخة الاحتياطية النصية (JSON) لأنها قد تكون كبيرة.
+// ملفات الصوت والمرفقات تُستثنى من النسخة الاحتياطية النصية (JSON) لأنها قد تكون كبيرة.
 // تُصدّر بياناتها الوصفية فقط، ويمكن إعادة تنزيلها أو رفعها لاحقًا.
-const BACKUP_EXCLUDED_STORES = new Set(['adhan_blobs']);
+const BACKUP_EXCLUDED_STORES = new Set(['adhan_blobs', 'finance_attachments']);
 
 /**
  * ترحيلات هيكل البيانات.
@@ -177,8 +309,28 @@ const DB_MIGRATIONS = [
         }
       }
     }
+  },
+  {
+    version: 4,
+    name: 'وحدة ماليّاتي',
+    migrate(db, transaction) {
+      const financeStores = [
+        'finance_accounts', 'finance_categories', 'finance_transactions',
+        'finance_obligations', 'finance_obligation_payments', 'finance_debts',
+        'finance_debt_payments', 'finance_savings_goals', 'finance_savings_entries',
+        'finance_budgets', 'finance_income_schedules', 'finance_attachments'
+      ];
+      for (const storeName of financeStores) {
+        if (!db.objectStoreNames.contains(storeName)) {
+          const store = db.createObjectStore(storeName, { keyPath: 'id' });
+          for (const [indexName, keyPath, options] of STORE_DEFS[storeName].indexes) {
+            store.createIndex(indexName, keyPath, options);
+          }
+        }
+      }
+    }
   }
-  // ترحيلات مستقبلية تُضاف هنا: { version: 4, migrate(db, tx) { ... } }
+  // ترحيلات مستقبلية تُضاف هنا: { version: 5, migrate(db, tx) { ... } }
 ];
 
 let dbHandle = null;

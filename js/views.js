@@ -246,6 +246,7 @@ function renderDashboard() {
       <div class="dash-grid">
         <div class="stack">
           ${typeof prayerDashboardCard === 'function' ? prayerDashboardCard() : ''}
+          ${typeof financeDashboardCard === 'function' ? financeDashboardCard() : ''}
 
           <div class="card">
             <div class="card-head">
