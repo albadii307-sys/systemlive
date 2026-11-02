@@ -24,6 +24,7 @@ const dom = {
 
 const PAGE_INFO = {
   dashboard: { title: 'الرئيسية', subtitle: 'نظرة سريعة على يومك' },
+  prayer: { title: 'الصلاة', subtitle: 'مواقيت دقيقة من موقعك وتنبيهات تناسب يومك' },
   habits: { title: 'العادات', subtitle: 'بناء عادات صغيرة بتأثير كبير' },
   tasks: { title: 'المهام', subtitle: 'تنظيم أولوياتك وإتمامها' },
   goals: { title: 'الأهداف', subtitle: 'تحويل الأحلام إلى خطوات قابلة للقياس' },
@@ -543,6 +544,75 @@ function bindGlobalEvents() {
           navigate(target.dataset.view);
           break;
         case 'go-reminders': navigate('reminders'); break;
+        case 'prayer-open-location': openPrayerLocationModal(); break;
+        case 'prayer-open-settings': openPrayerSettingsModal(); break;
+        case 'prayer-open-adhan': openPrayerAdhanModal(); break;
+        case 'prayer-open-library': openPrayerAdhanLibraryModal(); break;
+        case 'adhan-library-tab':
+          switchAdhanLibraryTab(target.dataset.tab);
+          break;
+        case 'adhan-download':
+          await downloadAdhanSoundFromUI(id, target);
+          break;
+        case 'adhan-delete':
+          await deleteAdhanSoundWithConfirm(id);
+          break;
+        case 'adhan-set-default':
+          await setAdhanDefaultSound(id);
+          if (document.querySelector('[data-adhan-library-panel]')) {
+            refreshAdhanLibraryModal({ preserveForm: true });
+          }
+          break;
+        case 'adhan-refresh-catalog':
+          await refreshAdhanCatalogFromUI();
+          break;
+        case 'prayer-detect-location': await detectPrayerLocationFromUI(target); break;
+        case 'prayer-city-search': await searchPrayerCitiesFromUI(); break;
+        case 'prayer-use-city': await applyPrayerCityFromButton(target); break;
+        case 'prayer-prev':
+          state.ui.prayerDate = addDaysISO(prayerSelectedDate(), -1);
+          renderPrayer();
+          break;
+        case 'prayer-next':
+          state.ui.prayerDate = addDaysISO(prayerSelectedDate(), 1);
+          renderPrayer();
+          break;
+        case 'prayer-today':
+          state.ui.prayerDate = prayerTodayISO();
+          renderPrayer();
+          break;
+        case 'prayer-goto-date':
+          closeAllModals();
+          state.ui.prayerDate = date || prayerTodayISO();
+          navigate('prayer');
+          break;
+        case 'prayer-mark': {
+          const key = target.dataset.key;
+          const wasDone = isPrayerDone(date, key);
+          await togglePrayerDone(date, key);
+          refreshUI();
+          showToast({
+            title: wasDone ? `تم إلغاء تسجيل ${PRAYER_LABELS[key]}` : `تم تسجيل صلاة ${PRAYER_LABELS[key]}`,
+            message: wasDone ? 'يمكنك إعادة التسجيل في أي وقت.' : 'متابعة اختيارية، بلا حكم أو ضغط.'
+          });
+          break;
+        }
+        case 'prayer-stats':
+          state.ui.prayerStatsDays = Number(target.dataset.days) === 30 ? 30 : 7;
+          if (state.view === 'prayer') renderPrayer();
+          else refreshUI();
+          break;
+        case 'prayer-test-sound': {
+          const checkedSound = target.dataset.sound
+            || target.closest('form')?.querySelector('input[name="adhanSound"]:checked')?.value
+            || null;
+          testPrayerSound(target.dataset.mode || 'full', checkedSound);
+          break;
+        }
+        case 'prayer-stop-sound':
+          stopPrayerSound();
+          showToast({ type: 'info', title: 'تم إيقاف الصوت' });
+          break;
         case 'export-backup': await exportBackup(); break;
         case 'import-backup': openImportBackup(); break;
         case 'import-mode': await performImport(target.dataset.mode); break;
@@ -723,7 +793,7 @@ function bindGlobalEvents() {
           break;
         }
         case 'calendar-all-filters':
-          state.ui.calendarFilters = new Set(['tasks', 'habits', 'reminders', 'sleep']);
+          state.ui.calendarFilters = new Set(['tasks', 'habits', 'reminders', 'sleep', 'prayer']);
           renderCalendar();
           break;
         case 'calendar-day': openDayDetails(date); break;
@@ -827,6 +897,10 @@ function bindGlobalEvents() {
         });
       }
     }
+    if (target.matches('[data-prayer-date]')) {
+      state.ui.prayerDate = target.value;
+      if (state.view === 'prayer') renderPrayer();
+    }
   });
 
   /* -------- الإدخال المباشر -------- */
@@ -847,6 +921,12 @@ function bindGlobalEvents() {
       const end = form.querySelector('#sleep-end')?.value;
       const preview = form.querySelector('[data-sleep-duration] strong');
       if (preview) preview.textContent = sleepDurationPreview(start, end);
+    }
+    if (target.matches('#prayer-adhan-form input[name="volume"]')) {
+      const value = clamp(Number(target.value) / 100, 0, 1);
+      const label = document.querySelector('[data-prayer-volume-label]');
+      if (label) label.textContent = `${Math.round(value * 100)}%`;
+      if (prayerAudioEl) prayerAudioEl.volume = value;
     }
   });
 
@@ -1062,6 +1142,100 @@ async function handleFormSubmit(form) {
     return;
   }
 
+  if (type === 'prayer-settings') {
+    const methodKeys = CALCULATION_METHODS.map((method) => method.key);
+    const method = fd.get('method');
+    const madhab = fd.get('madhab');
+    const highLatitudeRule = fd.get('highLatitudeRule');
+    const adjustments = {};
+    for (const key of PRAYER_KEYS) {
+      adjustments[key] = Math.max(-60, Math.min(60, Number(fd.get(`adj_${key}`)) || 0));
+    }
+    await savePrayerSettings({
+      calculation: {
+        method: methodKeys.includes(method) ? method : 'MuslimWorldLeague',
+        madhab: madhab === 'hanafi' ? 'hanafi' : 'shafi',
+        highLatitudeRule: HIGH_LATITUDE_LABELS[highLatitudeRule] ? highLatitudeRule : 'middleofthenight',
+        customFajrAngle: Math.max(0, Math.min(30, Number(fd.get('customFajrAngle')) || 18)),
+        customIshaAngle: Math.max(0, Math.min(30, Number(fd.get('customIshaAngle')) || 17)),
+        adjustments
+      },
+      preReminder: {
+        enabled: fd.get('preReminderEnabled') === 'on',
+        minutes: Number(fd.get('preReminderMinutes')) || 10
+      },
+      tracking: {
+        enabled: fd.get('trackingEnabled') === 'on',
+        startedAt: getPrayerSettings().tracking.startedAt
+      },
+      awareness: fd.get('awareness') === 'on'
+    });
+    closeAllModals();
+    refreshUI();
+    showToast({
+      title: 'تم حفظ إعدادات الصلاة',
+      message: 'أُعيد حساب المواقيت بالطريقة والتعديلات الجديدة.'
+    });
+    return;
+  }
+
+  if (type === 'prayer-adhan-library') {
+    await handleAdhanLibraryForm(form);
+    return;
+  }
+
+  if (type === 'adhan-upload') {
+    await handleAdhanUploadForm(form);
+    return;
+  }
+
+  if (type === 'prayer-adhan') {
+    const current = getPrayerSettings();
+    const alerts = {};
+    for (const key of PRAYER_ORDER) {
+      alerts[key] = {
+        enabled: fd.get(`alert_${key}_enabled`) === 'on',
+        mode: ['full', 'short', 'silent'].includes(fd.get(`alert_${key}_mode`))
+          ? fd.get(`alert_${key}_mode`)
+          : 'full',
+        soundId: current.alerts[key]?.soundId || null
+      };
+    }
+    const patch = {
+      alerts,
+      volume: clamp(Number(fd.get('volume')) / 100, 0, 1)
+    };
+    const adhanSound = fd.get('adhanSound');
+    if (adhanSound && adhanSoundById(adhanSound)) patch.adhanSound = adhanSound;
+    await savePrayerSettings(patch);
+    closeAllModals();
+    refreshUI();
+    showToast({
+      title: 'تم حفظ إعدادات الأذان',
+      message: `الصوت الافتراضي: ${adhanSoundLabel(getPrayerSettings().adhanSound)}. جرّبه الآن، وسيُستخدم عند دخول وقت كل صلاة.`
+    });
+    return;
+  }
+
+  if (type === 'prayer-location-manual') {
+    const lat = Number(fd.get('lat'));
+    const lng = Number(fd.get('lng'));
+    if (!Number.isFinite(lat) || lat < -90 || lat > 90) throw new Error('خط العرض يجب أن يكون بين -90 و90');
+    if (!Number.isFinite(lng) || lng < -180 || lng > 180) throw new Error('خط الطول يجب أن يكون بين -180 و180');
+    const timezone = (await timezoneForCoordinates(lat, lng)) || TZ;
+    await setPrayerLocation({
+      lat,
+      lng,
+      city: String(fd.get('city') || '').trim(),
+      country: String(fd.get('country') || '').trim(),
+      timezone,
+      source: 'manual'
+    });
+    closeAllModals();
+    refreshUI();
+    return;
+  }
+
   if (type === 'sleep-goal' || type === 'settings-sleep-goal') {
     const goal = Number(fd.get('goal'));
     if (!goal || goal < 4 || goal > 14) throw new Error('هدف النوم يجب أن يكون بين 4 و14 ساعة');
@@ -1106,6 +1280,8 @@ async function initApp() {
     updateNav();
     updatePageHeader();
     startReminderChecker();
+    if (typeof initPrayer === 'function') initPrayer();
+    if (typeof initAdhanLibrary === 'function') initAdhanLibrary();
 
     dom.shell.hidden = false;
     navigate('dashboard');

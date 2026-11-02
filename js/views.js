@@ -69,6 +69,7 @@ function entityIcon(type) {
   if (type === 'sleep') return 'moon';
   if (type === 'reminder') return 'bell';
   if (type === 'milestone') return 'flag';
+  if (type === 'adhan_audio') return 'volume';
   return 'circle';
 }
 
@@ -128,6 +129,7 @@ function renderDashboard() {
         <div class="today-item-meta">
           ${priorityPill(task.priority)}
           ${task.dueTime ? `<span>${formatTimeHM(task.dueTime)}</span>` : ''}
+          ${task.dueDate && task.dueTime && typeof prayerConflictChip === 'function' ? prayerConflictChip(task.dueDate, task.dueTime) : ''}
           ${isTaskOverdue(task) ? '<span class="text-danger">متأخرة</span>' : ''}
         </div>
       </div>
@@ -243,6 +245,8 @@ function renderDashboard() {
 
       <div class="dash-grid">
         <div class="stack">
+          ${typeof prayerDashboardCard === 'function' ? prayerDashboardCard() : ''}
+
           <div class="card">
             <div class="card-head">
               <h3 class="card-title"><span class="icon-wrap">${icon('check-circle', 17)}</span> عادات اليوم</h3>
@@ -496,6 +500,7 @@ function renderTasks() {
           ${task.description ? `<div class="task-desc">${escapeHtml(task.description)}</div>` : ''}
           <div class="task-meta">
             ${task.dueDate ? `<span class="meta-item ${late ? 'late' : ''}">${icon('calendar', 11)} ${relativeDateLabel(task.dueDate)}${task.dueTime ? ` · ${formatTimeHM(task.dueTime)}` : ''}</span>` : '<span class="meta-item">بدون موعد</span>'}
+            ${task.dueDate && task.dueTime && typeof prayerConflictChip === 'function' ? prayerConflictChip(task.dueDate, task.dueTime) : ''}
             ${goal ? `<span class="meta-item">${icon('target', 11)} ${escapeHtml(goal.title)}</span>` : ''}
             ${subtasks.length ? `<span class="meta-item">${icon('list-check', 11)} ${doneSubs}/${subtasks.length}</span>` : ''}
             ${task.completedAt ? `<span class="meta-item">${icon('check', 11)} ${formatTimestamp(task.completedAt, { day: 'numeric', month: 'short' })}</span>` : ''}

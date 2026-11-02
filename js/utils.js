@@ -34,7 +34,8 @@ const ACTION_LABELS = {
   snooze: 'تأجيل',
   pause: 'إيقاف مؤقت',
   resume: 'استئناف',
-  progress: 'تحديث تقدم'
+  progress: 'تحديث تقدم',
+  download: 'تنزيل'
 };
 const ENTITY_LABELS = {
   habit: 'عادة',
@@ -43,6 +44,8 @@ const ENTITY_LABELS = {
   milestone: 'مرحلة',
   sleep: 'سجل نوم',
   reminder: 'تذكير',
+  prayer: 'صلاة',
+  adhan_audio: 'صوت أذان',
   settings: 'إعدادات'
 };
 const ACTIVITY_COLORS = {
@@ -54,8 +57,10 @@ const ACTIVITY_COLORS = {
   snooze: 'warning',
   pause: 'warning',
   resume: 'blue',
-  progress: 'purple'
+  progress: 'purple',
+  download: 'blue'
 };
+const PRAYER_ACTIVITY_TYPES = ['prayer'];
 
 const HABIT_COLORS = ['#35e0b5', '#6c8cff', '#b58cff', '#ffc857', '#ff9f6b', '#ff8fc7', '#45d6df', '#8ed081'];
 const GOAL_COLORS = ['#b58cff', '#6c8cff', '#35e0b5', '#ffc857', '#ff9f6b', '#ff8fc7'];
@@ -119,7 +124,12 @@ const ICON_PATHS = {
   folder: '<path d="M3 7a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/>',
   eye: '<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/>',
   'arrow-right': '<path d="M5 12h14M12 5l7 7-7 7"/>',
-  sliders: '<path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/>'
+  sliders: '<path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/>',
+  'map-pin': '<path d="M20 10c0 5-8 12-8 12S4 15 4 10a8 8 0 1 1 16 0Z"/><circle cx="12" cy="10" r="2.5"/>',
+  volume: '<path d="M11 5 6 9H2v6h4l5 4Z"/><path d="M15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13"/>',
+  'volume-x': '<path d="M11 5 6 9H2v6h4l5 4Z"/><path d="m16 9 5 6M21 9l-5 6"/>',
+  mosque: '<path d="M4 21V11l8-6 8 6v10"/><path d="M9 21v-6a3 3 0 0 1 6 0v6"/><path d="M2 21h20M12 5V3"/>',
+  compass: '<circle cx="12" cy="12" r="9"/><path d="m16 8-2.5 5.5L8 16l2.5-5.5Z"/>'
 };
 
 function icon(name, size = 18) {

@@ -628,12 +628,14 @@ function openDayDetails(date) {
   const events = eventsGroupedByDate(date, date).get(date) || [];
   const groups = {
     tasks: events.filter((event) => event.type === 'task'),
+    prayer: events.filter((event) => event.type === 'prayer'),
     habits: events.filter((event) => event.type === 'habit'),
     reminders: events.filter((event) => event.type === 'reminder'),
     sleep: events.filter((event) => event.type === 'sleep')
   };
   const groupMeta = [
     ['tasks', 'المهام', 'list-check', 'blue'],
+    ['prayer', 'مواقيت الصلاة', 'mosque', 'teal'],
     ['habits', 'إنجازات العادات', 'check-circle', 'green'],
     ['reminders', 'التذكيرات', 'bell', 'warning'],
     ['sleep', 'النوم والاستيقاظ', 'moon', 'purple']
@@ -647,9 +649,11 @@ function openDayDetails(date) {
         <div class="day-group-title">${icon(iconName, 13)} ${label} <span class="pill muted">${list.length}</span></div>
         ${list.map((event) => {
           let action = 'edit-task';
+          if (event.type === 'prayer') action = 'prayer-goto-date';
           if (event.type === 'habit') action = 'habit-detail';
           if (event.type === 'reminder') action = 'edit-reminder';
           if (event.type === 'sleep') action = 'edit-sleep';
+          const isPrayer = event.type === 'prayer';
           return `
             <div class="day-event ${event.type}">
               <span class="day-event-color"></span>
@@ -658,8 +662,8 @@ function openDayDetails(date) {
                 <div class="day-event-meta">${event.time ? formatTimeHM(event.time) : 'طوال اليوم'}${event.meta ? ` · ${escapeHtml(event.meta)}` : ''}${event.status === 'paused' ? ' · موقوف' : ''}</div>
               </div>
               <div class="day-event-actions">
-                <button class="icon-btn" data-action="${action}" data-id="${event.id}" title="فتح/تعديل">${icon(event.type === 'habit' ? 'chart' : 'edit', 14)}</button>
-                ${event.type !== 'habit' ? `<button class="icon-btn danger" data-action="day-delete" data-type="${event.type}" data-id="${event.id}" title="حذف">${icon('trash', 14)}</button>` : ''}
+                <button class="icon-btn" data-action="${action}" data-id="${event.id}" data-date="${event.date}" title="${isPrayer ? 'فتح قسم الصلاة' : 'فتح/تعديل'}">${icon(event.type === 'habit' ? 'chart' : isPrayer ? 'mosque' : 'edit', 14)}</button>
+                ${!isPrayer && event.type !== 'habit' ? `<button class="icon-btn danger" data-action="day-delete" data-type="${event.type}" data-id="${event.id}" title="حذف">${icon('trash', 14)}</button>` : ''}
               </div>
             </div>
           `;

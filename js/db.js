@@ -5,8 +5,8 @@
 'use strict';
 
 const DB_NAME = 'nizami_db';
-const DB_VERSION = 1;
-const SCHEMA_VERSION = 1;
+const DB_VERSION = 3;
+const SCHEMA_VERSION = 3;
 const FALLBACK_KEY = 'nizami_fallback_v1';
 
 const STORE_DEFS = {
@@ -64,6 +64,31 @@ const STORE_DEFS = {
       ['createdAt', 'createdAt', {}]
     ]
   },
+  prayer_logs: {
+    keyPath: 'id',
+    indexes: [
+      ['date', 'date', {}],
+      ['prayer', 'prayer', {}],
+      ['date_prayer', ['date', 'prayer'], { unique: true }],
+      ['updatedAt', 'updatedAt', {}]
+    ]
+  },
+  adhan_library: {
+    keyPath: 'id',
+    indexes: [
+      ['type', 'type', {}],
+      ['sourceId', 'sourceId', {}],
+      ['reciter', 'reciter', {}],
+      ['addedAt', 'addedAt', {}]
+    ]
+  },
+  adhan_blobs: {
+    keyPath: 'id',
+    indexes: [
+      ['libraryId', 'libraryId', {}],
+      ['addedAt', 'addedAt', {}]
+    ]
+  },
   activity_logs: {
     keyPath: 'id',
     indexes: [
@@ -85,14 +110,22 @@ const CAMEL_TO_STORE = {
   habitLogs: 'habit_logs',
   goalMilestones: 'goal_milestones',
   sleepRecords: 'sleep_records',
-  activityLogs: 'activity_logs'
+  activityLogs: 'activity_logs',
+  prayerLogs: 'prayer_logs',
+  adhanLibrary: 'adhan_library'
 };
 const STORE_TO_CAMEL = {
   habit_logs: 'habitLogs',
   goal_milestones: 'goalMilestones',
   sleep_records: 'sleepRecords',
-  activity_logs: 'activityLogs'
+  activity_logs: 'activityLogs',
+  prayer_logs: 'prayerLogs',
+  adhan_library: 'adhanLibrary'
 };
+
+// ملفات الصوت تُستثنى من النسخة الاحتياطية النصية (JSON) لأنها قد تكون كبيرة.
+// تُصدّر بياناتها الوصفية فقط، ويمكن إعادة تنزيلها أو رفعها لاحقًا.
+const BACKUP_EXCLUDED_STORES = new Set(['adhan_blobs']);
 
 /**
  * ترحيلات هيكل البيانات.
@@ -118,8 +151,34 @@ const DB_MIGRATIONS = [
         }
       }
     }
+  },
+  {
+    version: 2,
+    name: 'سجلات الصلاة',
+    migrate(db, transaction) {
+      if (!db.objectStoreNames.contains('prayer_logs')) {
+        const store = db.createObjectStore('prayer_logs', { keyPath: 'id' });
+        for (const [indexName, keyPath, options] of STORE_DEFS.prayer_logs.indexes) {
+          store.createIndex(indexName, keyPath, options);
+        }
+      }
+    }
+  },
+  {
+    version: 3,
+    name: 'مكتبة الأذان المحلية',
+    migrate(db, transaction) {
+      for (const storeName of ['adhan_library', 'adhan_blobs']) {
+        if (!db.objectStoreNames.contains(storeName)) {
+          const store = db.createObjectStore(storeName, { keyPath: 'id' });
+          for (const [indexName, keyPath, options] of STORE_DEFS[storeName].indexes) {
+            store.createIndex(indexName, keyPath, options);
+          }
+        }
+      }
+    }
   }
-  // ترحيلات مستقبلية تُضاف هنا: { version: 2, migrate(db, tx) { ... } }
+  // ترحيلات مستقبلية تُضاف هنا: { version: 4, migrate(db, tx) { ... } }
 ];
 
 let dbHandle = null;
@@ -419,6 +478,7 @@ const DB = {
     await openDatabase();
     const stores = {};
     for (const name of STORE_NAMES) {
+      if (BACKUP_EXCLUDED_STORES.has(name)) continue;
       stores[STORE_TO_CAMEL[name] || name] = await DB.getAll(name);
     }
     return {
@@ -461,7 +521,9 @@ const DB = {
     if (dbMode === 'fallback') {
       const data = loadFallbackData();
       if (replace) {
-        for (const name of STORE_NAMES) data[name] = [];
+        for (const name of STORE_NAMES) {
+          if (!BACKUP_EXCLUDED_STORES.has(name)) data[name] = [];
+        }
       }
       for (const [name, records] of Object.entries(toImport)) {
         const keyPath = STORE_DEFS[name].keyPath;
@@ -478,6 +540,7 @@ const DB = {
 
     await runMultiTransaction(STORE_NAMES, 'readwrite', (transaction) => {
       for (const name of STORE_NAMES) {
+        if (BACKUP_EXCLUDED_STORES.has(name)) continue;
         const store = transaction.objectStore(name);
         if (replace) store.clear();
         const records = toImport[name] || [];

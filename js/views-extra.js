@@ -81,6 +81,10 @@ function calendarEventsBetween(startDate, endDate) {
     }
   }
 
+  if (filters.has('prayer') && typeof prayerCalendarEvents === 'function') {
+    events.push(...prayerCalendarEvents(startDate, endDate));
+  }
+
   if (filters.has('sleep')) {
     for (const record of state.data.sleep) {
       if (record.startDate >= startDate && record.startDate <= endDate) {
@@ -154,7 +158,7 @@ function renderCalendar() {
   }
 
   const modeLabels = [['month', 'شهري'], ['week', 'أسبوعي'], ['day', 'يومي']];
-  const filterLabels = [['tasks', 'المهام'], ['habits', 'العادات'], ['reminders', 'التذكيرات'], ['sleep', 'النوم']];
+  const filterLabels = [['tasks', 'المهام'], ['prayer', 'الصلاة'], ['habits', 'العادات'], ['reminders', 'التذكيرات'], ['sleep', 'النوم']];
 
   dom.view.innerHTML = `
     <div class="view-fade">
@@ -189,6 +193,7 @@ function renderCalendar() {
 
       <div class="cal-legend">
         <span><i style="background:var(--blue)"></i> مهام</span>
+        <span><i style="background:var(--teal)"></i> صلوات</span>
         <span><i style="background:var(--accent)"></i> إنجازات عادات</span>
         <span><i style="background:var(--warning)"></i> تذكيرات</span>
         <span><i style="background:var(--purple)"></i> نوم واستيقاظ</span>
@@ -554,6 +559,7 @@ function reminderCard(reminder, info, isPast) {
           <span class="meta-item">${icon('repeat', 11)} ${reminder.repeat === 'weekdays' ? `أيام: ${(reminder.weekdays || []).map((d) => WEEKDAYS_SHORT[d]).join('، ') || 'غير محدد'}` : reminder.repeat === 'custom' ? `كل ${reminder.customInterval} أيام` : REPEAT_LABELS[reminder.repeat]}</span>
           ${linkedLabel ? `<span class="meta-item">${icon(linkedIcon, 11)} ${escapeHtml(linkedLabel)}</span>` : ''}
           ${info ? `<span class="meta-item">${icon('calendar', 11)} ${relativeDateLabel(info.date)} · ${formatTimeHM(info.time)}</span>` : ''}
+          ${info && typeof prayerConflictChip === 'function' ? prayerConflictChip(info.date, info.time) : ''}
         </div>
       </div>
       <div class="next-time-box">
@@ -694,6 +700,7 @@ function renderSettings() {
     goals: state.data.goals.length,
     sleep: state.data.sleep.length,
     reminders: state.data.reminders.length,
+    prayerLogs: (state.data.prayerLogs || []).length,
     activity: state.data.activity.length
   };
 
@@ -764,13 +771,29 @@ function renderSettings() {
               <span class="pill muted">${counts.goals} هدف</span>
               <span class="pill muted">${counts.sleep} نوم</span>
               <span class="pill muted">${counts.reminders} تذكير</span>
+              <span class="pill muted">${counts.prayerLogs} تسجيل صلاة</span>
               <span class="pill muted">${counts.activity} نشاط</span>
             </div>
             <div class="row wrap mt-3">
               <button class="soft-btn small" data-action="export-backup">${icon('download', 13)} تصدير JSON</button>
               <button class="soft-btn small" data-action="import-backup">${icon('upload', 13)} استيراد JSON</button>
             </div>
-            <p class="help mt-2" style="color:var(--muted-2);font-size:10.5px">النسخ الاحتياطي يشمل جميع المخازن: العادات، سجلاتها، المهام، الأهداف، المراحل، النوم، التذكيرات، سجل النشاط، والإعدادات.</p>
+            <p class="help mt-2" style="color:var(--muted-2);font-size:10.5px">النسخ الاحتياطي يشمل جميع المخازن: العادات، سجلاتها، المهام، الأهداف، المراحل، النوم، التذكيرات، سجلات الصلاة، سجل النشاط، والإعدادات.</p>
+          </section>
+
+          <section class="card settings-section">
+            <h3>${icon('mosque', 17)} الصلاة والأذان</h3>
+            <p>الموقع وطريقة الحساب والتنبيهات. تعمل المواقيت من إحداثياتك فقط.</p>
+            <div class="kv"><span>الموقع</span><span>${getPrayerSettings().location ? escapeHtml(prayerLocationLabel(getPrayerSettings().location)) : 'غير محدد'}</span></div>
+            <div class="kv"><span>المنطقة الزمنية</span><span>${escapeHtml(getPrayerSettings().location?.timezone || '—')}</span></div>
+            <div class="kv"><span>طريقة الحساب</span><span>${escapeHtml(prayerMethodInfo(getPrayerSettings()).label)}</span></div>
+            <div class="kv"><span>سجلات الصلاة</span><span>${counts.prayerLogs}</span></div>
+            <div class="row wrap mt-3">
+              <button class="soft-btn small" data-action="prayer-open-location">${icon('map-pin', 13)} الموقع</button>
+              <button class="soft-btn small" data-action="prayer-open-settings">${icon('sliders', 13)} طريقة الحساب</button>
+              <button class="ghost-btn small" data-action="prayer-open-adhan">${icon('volume', 13)} الأذان</button>
+            </div>
+            <p class="help mt-2">الأذان والتنبيهات تعمل أثناء فتح التطبيق فقط. لا يُشغّل الأذان بعد إغلاق المتصفح بالكامل في هذه النسخة المحلية.</p>
           </section>
 
           <section class="card settings-section">

@@ -6,7 +6,7 @@
    ========================================================= */
 'use strict';
 
-const CACHE_NAME = 'nizami-shell-v2';
+const CACHE_NAME = 'nizami-shell-v5';
 const APP_SHELL = [
   './',
   './index.html',
@@ -14,11 +14,19 @@ const APP_SHELL = [
   './js/utils.js',
   './js/db.js',
   './js/store.js',
+  './js/vendor/adhan.umd.min.js',
+  './js/prayer.js',
+  './js/adhan-library.js',
   './js/views.js',
   './js/views-extra.js',
+  './js/views-prayer.js',
   './js/modals.js',
   './js/app.js',
   './assets/icon.svg',
+  './assets/sounds/adhan-full.ogg',
+  './assets/sounds/adhan-sabah-fakhry.mp3',
+  './assets/sounds/adhan-beautiful.ogg',
+  './assets/sounds/ADHAN-CREDITS.md',
   './manifest.webmanifest'
 ];
 

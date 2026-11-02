@@ -10,6 +10,7 @@ const DEFAULT_SETTINGS = {
   weekStartsOn: 0,
   notificationsAsked: false,
   notificationsEnabled: false,
+  prayer: null,
   createdAt: Date.now(),
   schemaVersion: SCHEMA_VERSION
 };
@@ -27,13 +28,17 @@ const state = {
     milestones: [],
     sleep: [],
     reminders: [],
+    prayerLogs: [],
+    adhanLibrary: [],
     activity: []
   },
   settings: { ...DEFAULT_SETTINGS },
   ui: {
     calendarMode: 'month',
     calendarCursor: todayISO(),
-    calendarFilters: new Set(['tasks', 'habits', 'reminders', 'sleep']),
+    calendarFilters: new Set(['tasks', 'habits', 'reminders', 'sleep', 'prayer']),
+    prayerDate: null,
+    prayerStatsDays: 7,
     sleepChartDays: 7,
     sleepFilter: 'all',
     reminderTab: 'upcoming',
@@ -61,6 +66,8 @@ const STORE_PROP = {
   goal_milestones: 'milestones',
   sleep_records: 'sleep',
   reminders: 'reminders',
+  prayer_logs: 'prayerLogs',
+  adhan_library: 'adhanLibrary',
   activity_logs: 'activity',
   settings: 'settings'
 };
@@ -94,7 +101,7 @@ async function loadStore(storeName) {
 }
 
 async function loadAllData() {
-  const [habits, habitLogs, tasks, goals, milestones, sleep, reminders, activity, settingsRecord] = await Promise.all([
+  const [habits, habitLogs, tasks, goals, milestones, sleep, reminders, prayerLogs, adhanLibrary, activity, settingsRecord] = await Promise.all([
     DB.getAll('habits'),
     DB.getAll('habit_logs'),
     DB.getAll('tasks'),
@@ -102,6 +109,8 @@ async function loadAllData() {
     DB.getAll('goal_milestones'),
     DB.getAll('sleep_records'),
     DB.getAll('reminders'),
+    DB.getAll('prayer_logs'),
+    DB.getAll('adhan_library'),
     DB.getAll('activity_logs'),
     DB.get('settings', 'general')
   ]);
@@ -113,6 +122,8 @@ async function loadAllData() {
   state.data.milestones = milestones;
   state.data.sleep = sleep;
   state.data.reminders = reminders;
+  state.data.prayerLogs = prayerLogs;
+  state.data.adhanLibrary = adhanLibrary;
   state.data.activity = sortBy(activity, (a) => a.timestamp, 'desc');
 
   if (settingsRecord && settingsRecord.value && typeof settingsRecord.value === 'object') {
@@ -120,6 +131,9 @@ async function loadAllData() {
   } else {
     state.settings = { ...DEFAULT_SETTINGS };
     await DB.put('settings', { key: 'general', value: { ...DEFAULT_SETTINGS } });
+  }
+  if (typeof normalizePrayerSettings === 'function') {
+    state.settings.prayer = normalizePrayerSettings(state.settings.prayer);
   }
   state.settings.schemaVersion = SCHEMA_VERSION;
   state.dbMode = DB.mode();
@@ -997,10 +1011,13 @@ async function resetAllData() {
   await DB.clearAll();
   state.data = {
     habits: [], habitLogs: [], tasks: [], goals: [], milestones: [],
-    sleep: [], reminders: [], activity: []
+    sleep: [], reminders: [], prayerLogs: [], adhanLibrary: [], activity: []
   };
   state.settings = { ...DEFAULT_SETTINGS };
-  await DB.put('settings', { key: 'general', value: { ...DEFAULT_SETTINGS } });
+  if (typeof normalizePrayerSettings === 'function') {
+    state.settings.prayer = normalizePrayerSettings(null);
+  }
+  await DB.put('settings', { key: 'general', value: { ...state.settings } });
 }
 
 async function reloadEverything() {
