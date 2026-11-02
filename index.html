@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#0a0f1a" />
+  <meta name="description" content="نظامي — تطبيق متكامل لإدارة العادات والمهام والأهداف والنوم والتذكيرات والتقويم." />
+  <title>نظامي — حياتك بنظام</title>
+  <link rel="icon" href="assets/icon.svg" type="image/svg+xml" />
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/styles.css" />
+</head>
+<body>
+  <div id="app-loading" class="app-loading">
+    <div class="loading-mark">ن</div>
+    <div class="loading-title">نظامي</div>
+    <div class="loading-bar"><span></span></div>
+    <p>جارٍ تجهيز مساحتك...</p>
+  </div>
+
+  <div class="app-shell" id="app-shell" hidden>
+    <div class="sidebar-backdrop" id="sidebar-backdrop" data-action="close-sidebar"></div>
+
+    <aside class="sidebar" id="sidebar" aria-label="التنقل الرئيسي">
+      <div class="brand">
+        <div class="brand-mark">ن</div>
+        <div class="brand-text">
+          <strong>نظامي</strong>
+          <span>حياتك... بنظام</span>
+        </div>
+      </div>
+
+      <nav class="nav" id="main-nav">
+        <p class="nav-group-title">مساحتك</p>
+        <button class="nav-item" data-nav="dashboard">
+          <span class="nav-icon" data-icon="home"></span><span>الرئيسية</span>
+        </button>
+        <button class="nav-item" data-nav="habits">
+          <span class="nav-icon" data-icon="check-circle"></span><span>العادات</span>
+        </button>
+        <button class="nav-item" data-nav="tasks">
+          <span class="nav-icon" data-icon="list-check"></span><span>المهام</span>
+        </button>
+        <button class="nav-item" data-nav="goals">
+          <span class="nav-icon" data-icon="target"></span><span>الأهداف</span>
+        </button>
+
+        <p class="nav-group-title">المتابعة</p>
+        <button class="nav-item" data-nav="calendar">
+          <span class="nav-icon" data-icon="calendar"></span><span>التقويم</span>
+        </button>
+        <button class="nav-item" data-nav="sleep">
+          <span class="nav-icon" data-icon="moon"></span><span>النوم</span>
+        </button>
+        <button class="nav-item" data-nav="reminders">
+          <span class="nav-icon" data-icon="bell"></span><span>التذكيرات</span>
+          <span class="nav-badge" id="reminders-badge" hidden></span>
+        </button>
+        <button class="nav-item" data-nav="activity">
+          <span class="nav-icon" data-icon="history"></span><span>سجل النشاط</span>
+        </button>
+
+        <p class="nav-group-title">النظام</p>
+        <button class="nav-item" data-nav="settings">
+          <span class="nav-icon" data-icon="settings"></span><span>الإعدادات</span>
+        </button>
+      </nav>
+
+      <div class="sidebar-foot">
+        <div class="storage-pill" id="storage-pill">
+          <span class="storage-dot"></span>
+          <span id="storage-text">تخزين محلي آمن</span>
+        </div>
+        <button class="ghost-btn small w-full" data-action="export-backup">
+          <span data-icon="download"></span> نسخة احتياطية
+        </button>
+      </div>
+    </aside>
+
+    <div class="main">
+      <header class="topbar">
+        <div class="topbar-right">
+          <button class="icon-btn menu-btn" data-action="open-sidebar" aria-label="القائمة">
+            <span data-icon="menu"></span>
+          </button>
+          <div class="page-heading">
+            <h1 id="page-title">الرئيسية</h1>
+            <p id="page-subtitle">نظرة سريعة على يومك</p>
+          </div>
+        </div>
+        <div class="topbar-left">
+          <div class="date-chip" id="topbar-date">
+            <span data-icon="calendar"></span>
+            <span id="topbar-date-text"></span>
+          </div>
+          <button class="icon-btn has-dot" id="topbar-bell" data-action="go-reminders" aria-label="التذكيرات">
+            <span data-icon="bell"></span>
+          </button>
+          <button class="primary-btn compact" data-action="quick-add">
+            <span data-icon="plus"></span><span class="hide-xs">إضافة</span>
+          </button>
+        </div>
+      </header>
+
+      <main id="view" class="view" tabindex="-1">
+        <div class="view-loading">
+          <div class="skeleton skeleton-title"></div>
+          <div class="skeleton-grid">
+            <div class="skeleton skeleton-card"></div>
+            <div class="skeleton skeleton-card"></div>
+            <div class="skeleton skeleton-card"></div>
+          </div>
+        </div>
+      </main>
+    </div>
+  </div>
+
+  <div id="modal-root"></div>
+  <div id="toast-root" class="toast-root" aria-live="polite"></div>
+  <div id="quick-add-root"></div>
+
+  <noscript>
+    <div class="noscript">يحتاج تطبيق «نظامي» إلى تفعيل JavaScript ليعمل.</div>
+  </noscript>
+
+  <script src="js/utils.js"></script>
+  <script src="js/db.js"></script>
+  <script src="js/store.js"></script>
+  <script src="js/views.js"></script>
+  <script src="js/views-extra.js"></script>
+  <script src="js/modals.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
