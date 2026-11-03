@@ -334,6 +334,7 @@ function openQuickAdd() {
       <button class="quick-menu-item" data-qa="reminder"><div class="quick-menu-icon warning">${icon('bell', 16)}</div><span>إضافة تذكير</span><div class="spacer"></div>${icon('arrow-right', 14)}</button>
       <button class="quick-menu-item" data-qa="finance-expense"><div class="quick-menu-icon green">${icon('receipt', 16)}</div><span>تسجيل مصروف</span><div class="spacer"></div>${icon('arrow-right', 14)}</button>
       <button class="quick-menu-item" data-qa="finance-income"><div class="quick-menu-icon blue">${icon('arrow-down-left', 16)}</div><span>تسجيل دخل / راتب</span><div class="spacer"></div>${icon('arrow-right', 14)}</button>
+      <button class="quick-menu-item" data-qa="finance-income-source"><div class="quick-menu-icon blue">${icon('plus', 16)}</div><span>إضافة مصدر دخل</span><div class="spacer"></div>${icon('arrow-right', 14)}</button>
     </div>
   `;
   const close = () => overlay.remove();
@@ -358,6 +359,12 @@ function openQuickAdd() {
           navigate('finance');
           showToast({ type: 'warning', title: 'ماليّاتي مقفل', message: 'أدخل رمز PIN أولًا' });
         } else openFinanceIncomeModal();
+      }
+      if (action === 'finance-income-source') {
+        if (typeof financeIsLocked === 'function' && financeIsLocked()) {
+          navigate('finance');
+          showToast({ type: 'warning', title: 'ماليّاتي مقفل', message: 'أدخل رمز PIN أولًا' });
+        } else openFinanceIncomeSourceModal();
       }
     });
   });
@@ -398,15 +405,37 @@ function openImportBackup() {
     if (!file) return;
     try {
       const payload = JSON.parse(await file.text());
+      
+      // التحقق من سلامة الملف قبل عرض واجهة الاستيراد
+      const validation = await DB.validateBackup(payload);
+      if (!validation.valid) {
+        showToast({ type: 'error', title: 'ملف غير صالح', message: validation.errors.join(' · ') });
+        input.value = '';
+        return;
+      }
+
       pendingImport = payload;
+      const storeList = Object.entries(validation.stores)
+        .map(([name, info]) => `<li>${name}: ${info.count} سجل</li>`)
+        .join('');
+
       openModal({
         title: 'استيراد نسخة احتياطية',
         subtitle: file.name,
         size: 'sm',
         content: `
           <div class="confirm-text">
-            تمت قراءة الملف بنجاح. اختر طريقة الاستيراد:
-            <br><br>
+            تم التحقق من ملف النسخة الاحتياطية بنجاح.<br><br>
+            <strong>التطبيق:</strong> ${escapeHtml(validation.app)}<br>
+            <strong>الإصدار:</strong> ${validation.schemaVersion || 'غير محدد'}<br>
+            <strong>تاريخ التصدير:</strong> ${validation.exportedAt || 'غير محدد'}<br>
+            <strong>إجمالي السجلات:</strong> ${validation.totalRecords}
+          </div>
+          <div class="confirm-text mt-2">
+            <strong>المحتوى:</strong>
+            <ul style="margin:6px 0 0 1rem;text-align:start">${storeList}</ul>
+          </div>
+          <div class="row wrap mt-2">
             <strong>الاستبدال:</strong> يحذف البيانات الحالية ويستورد محتوى الملف فقط.<br>
             <strong>الدمج:</strong> يحتفظ بالبيانات الحالية ويضيف العناصر الجديدة أو يحدّث المتشابهة بالمعرّف.
           </div>
@@ -431,15 +460,37 @@ function openImportBackup() {
 async function performImport(mode) {
   if (!pendingImport) return;
   try {
-    await DB.importData(pendingImport, { replace: mode === 'replace' });
+    const result = await DB.importData(pendingImport, { replace: mode === 'replace' });
     pendingImport = null;
     closeAllModals();
     await reloadEverything();
     refreshUI();
-    showToast({
-      title: 'تم الاستيراد بنجاح',
-      message: mode === 'replace' ? 'تم استبدال البيانات بالكامل' : 'تم دمج البيانات مع الموجود'
+    
+    // عرض تقرير الاستعادة
+    const imported = result.imported || {};
+    const total = Object.values(imported).reduce((a, b) => a + b, 0);
+    const storeList = Object.entries(imported)
+      .map(([name, count]) => `<li>${name}: ${count} سجل</li>`)
+      .join('');
+
+    openModal({
+      title: 'تم الاستعادة بنجاح',
+      subtitle: mode === 'replace' ? 'تم استبدال البيانات بالكامل' : 'تم دمج البيانات مع الموجود',
+      size: 'sm',
+      content: `
+        <div class="confirm-text">
+          <strong>إجمالي السجلات المستعادة:</strong> ${total}<br>
+          <strong>الطريقة:</strong> ${mode === 'replace' ? 'استبدال' : 'دمج'}
+        </div>
+        <div class="confirm-text mt-2">
+          <strong>تفاصيل المخازن:</strong>
+          <ul style="margin:6px 0 0 1rem;text-align:start">${storeList}</ul>
+        </div>
+      `,
+      footer: `<button class="primary-btn" data-modal-close>موافق</button>`
     });
+    
+    showToast({ title: 'تم الاستعادة بنجاح', message: `تم استعادة ${total} سجل من النسخة الاحتياطية` });
   } catch (error) {
     console.error('[نظامي] فشل الاستيراد', error);
     showToast({ type: 'error', title: 'فشل الاستيراد', message: error.message });
@@ -659,6 +710,7 @@ function bindGlobalEvents() {
         case 'edit-habit': closeAnd(() => openHabitModal(id)); break;
         case 'habit-detail': closeAnd(() => openHabitDetail(id)); break;
         case 'delete-habit': await handleDelete('habit', id); break;
+        case 'tpl-choose-from': closeAllModals(); renderTemplatesModal(); break;
         case 'toggle-habit':
           await toggleHabitCompletion(id, date || todayISO());
           refreshUI();
@@ -716,6 +768,7 @@ function bindGlobalEvents() {
         case 'open-goal-modal': openGoalModal(); break;
         case 'edit-goal': closeAnd(() => openGoalModal(id)); break;
         case 'delete-goal': await handleDelete('goal', id); break;
+        case 'tpl-choose-from': closeAllModals(); renderTemplatesModal(); break;
         case 'goal-detail': closeAnd(() => openGoalDetail(id)); break;
         case 'goal-progress': closeAnd(() => openGoalProgress(id)); break;
         case 'goal-task-add': closeAnd(() => openTaskModal(null, { goalId: id })); break;
@@ -749,6 +802,7 @@ function bindGlobalEvents() {
         case 'open-reminder-modal': openReminderModal(null, { date }); break;
         case 'edit-reminder': closeAnd(() => openReminderModal(id)); break;
         case 'delete-reminder': await handleDelete('reminder', id); break;
+        case 'tpl-choose-from': closeAllModals(); renderTemplatesModal(); break;
         case 'snooze-reminder': openSnooze(id); break;
         case 'do-snooze':
           await snoozeReminder(id, Number(target.dataset.minutes) || 10);
@@ -1015,7 +1069,24 @@ async function handleFormSubmit(form) {
       weeklyGoal: Number(fd.get('weeklyGoal')) || days.length
     };
     if (id) await updateHabit(id, input);
-    else await createHabit(input);
+    else {
+      const saved = await createHabit(input);
+      if (fd.get('saveAsTemplate') === 'on') {
+        await createTemplate({
+          entityType: 'habit',
+          name: input.name,
+          description: input.description,
+          data: {
+            name: input.name,
+            description: input.description,
+            color: input.color,
+            days: input.days,
+            weeklyGoal: input.weeklyGoal
+          },
+          tags: []
+        });
+      }
+    }
     closeAllModals();
     refreshUI();
     showToast({ title: id ? 'تم تحديث العادة' : 'تمت إضافة العادة', message: 'تُحفظ البيانات تلقائيًا على جهازك' });
@@ -1041,6 +1112,24 @@ async function handleFormSubmit(form) {
       subtasks
     };
     const saved = id ? await updateTask(id, input) : await createTask(input);
+    if (fd.get('saveAsTemplate') === 'on' && !id) {
+      await createTemplate({
+        entityType: 'task',
+        name: input.title,
+        description: input.description,
+        data: {
+          title: input.title,
+          description: input.description,
+          priority: input.priority,
+          status: input.status,
+          category: input.category,
+          dueTime: input.dueTime,
+          goalId: input.goalId,
+          subtasks: input.subtasks
+        },
+        tags: input.category ? [input.category] : []
+      });
+    }
     if (fd.get('createReminder') === 'on' && saved.dueDate) {
       const existing = state.data.reminders.find((reminder) => reminder.linkType === 'task' && reminder.linkId === saved.id && reminder.status !== 'completed');
       if (!existing) {
@@ -1075,7 +1164,29 @@ async function handleFormSubmit(form) {
     };
     if (input.endDate < input.startDate) throw new Error('تاريخ النهاية يجب أن يكون بعد تاريخ البداية');
     if (id) await updateGoal(id, input);
-    else await createGoal(input);
+    else {
+      const saved = await createGoal(input);
+      if (fd.get('saveAsTemplate') === 'on') {
+        await createTemplate({
+          entityType: 'goal',
+          name: input.title,
+          description: input.description,
+          data: {
+            title: input.title,
+            description: input.description,
+            startDate: input.startDate,
+            endDate: input.endDate,
+            targetValue: input.targetValue,
+            currentValue: 0,
+            unit: input.unit,
+            color: input.color,
+            status: 'active',
+            progressHistory: []
+          },
+          tags: []
+        });
+      }
+    }
     closeAllModals();
     refreshUI();
     showToast({ title: id ? 'تم تحديث الهدف' : 'تم إنشاء الهدف' });
@@ -1140,7 +1251,25 @@ async function handleFormSubmit(form) {
       linkId
     };
     if (id) await updateReminder(id, input);
-    else await createReminder(input);
+    else {
+      const saved = await createReminder(input);
+      if (fd.get('saveAsTemplate') === 'on') {
+        await createTemplate({
+          entityType: 'reminder',
+          name: input.title,
+          description: input.description,
+          data: {
+            title: input.title,
+            description: input.description,
+            time: input.time,
+            repeat: input.repeat,
+            weekdays: input.weekdays,
+            customInterval: input.customInterval
+          },
+          tags: []
+        });
+      }
+    }
     closeAllModals();
     refreshUI();
     showToast({ title: id ? 'تم تحديث التذكير' : 'تمت إضافة التذكير' });

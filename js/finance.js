@@ -755,14 +755,18 @@ function financeSafeToSpend(scope = 'all') {
   const horizon = nextIncome ? nextIncome.date : addDaysISO(today, 30);
   const days = Math.max(1, diffDaysISO(today, horizon));
 
+  // جميع الالتزامات غير المسددة ضمن الأفق الزمني (بما في ذلك المتأخرة التي استحقّت قبل اليوم)
   const obligations = financeObligations(scope)
     .filter((obligation) => {
       const info = financeObligationInfo(obligation);
       return info.status !== 'paid' && info.status !== 'ended'
-        && obligation.dueDate >= today && obligation.dueDate <= horizon;
+        && obligation.dueDate <= horizon;
     })
     .map((obligation) => ({ obligation, info: financeObligationInfo(obligation) }));
   const obligationsTotal = financeRound(sum(obligations, ({ info }) => info.remainingDue));
+
+  const overdueObligations = obligations.filter(({ info }) => info.status === 'overdue');
+  const overdueTotal = financeRound(sum(overdueObligations, ({ info }) => info.remainingDue));
 
   const monthlySavings = Math.max(0, Number(settings.plannedSavingsMonthly) || 0);
   const plannedSavings = financeRound(monthlySavings * (days / 30));
@@ -777,6 +781,8 @@ function financeSafeToSpend(scope = 'all') {
     days,
     obligationsTotal,
     obligations,
+    overdueObligations,
+    overdueTotal,
     plannedSavings,
     monthlySavings,
     raw,
@@ -785,10 +791,11 @@ function financeSafeToSpend(scope = 'all') {
     deficit: raw < 0 ? Math.abs(raw) : 0,
     assumptions: [
       `الرصيد الفعلي المتاح الآن: ${money(cash)} (بعد استبعاد المبالغ المدخرة)`,
+      `جميع الالتزامات غير المسددة (بما فيها المتأخرة): ${money(obligationsTotal)}`,
+      overdueTotal > 0 ? `منها متأخر بالفعل: ${money(overdueTotal)}` : 'لا توجد التزامات متأخرة',
       nextIncome
-        ? `الدخل القادم المتوقع في ${formatDateLong(nextIncome.date)} (${days} يومًا)`
+        ? `الدخل القادم المتوقع في ${formatDateLong(nextIncome.date)} (${days} يومًا) — يُستبعد من الرصيد الفعلي حتى الاستلام الفعلي`
         : `لا يوجد جدول دخل قادم، لذلك استُخدمت نافذة 30 يومًا`,
-      `الالتزامات المستحقة خلال الفترة: ${money(obligationsTotal)}`,
       `الادخار المخطط للفترة: ${money(plannedSavings)}${monthlySavings ? ` (${money(monthlySavings)} شهريًا)` : ''}`,
       'هذا تقدير تخطيطي وليس رصيدًا مؤكدًا؛ لا يشمل المصروفات اليومية الاختيارية.'
     ]
@@ -1368,7 +1375,10 @@ async function createFinanceTransfer(input) {
     linkedTransactionId: outLeg.id
   };
   outLeg.linkedTransactionId = inLeg.id;
-  await DB.bulkPut('finance_transactions', [outLeg, inLeg]);
+  await DB.multiTransaction([
+    { store: 'finance_transactions', type: 'put', record: outLeg },
+    { store: 'finance_transactions', type: 'put', record: inLeg }
+  ]);
   await logActivity('transfer', 'finance_transaction', groupId,
     `تحويل ${money(base.amount)} من ${financeAccountName(outLeg.accountId)} إلى ${financeAccountName(inLeg.accountId)}`,
     null, { amount: base.amount, fromAccountId: outLeg.accountId, toAccountId: inLeg.accountId, groupId });
@@ -1472,8 +1482,10 @@ async function createFinanceDebt(input) {
     notes: debt.notes
   });
   debt.originalTransactionId = tx.id;
-  await DB.put('finance_debts', debt);
-  await DB.put('finance_transactions', tx);
+  await DB.multiTransaction([
+    { store: 'finance_debts', type: 'put', record: debt },
+    { store: 'finance_transactions', type: 'put', record: tx }
+  ]);
   await loadStore('finance_debts');
   await loadStore('finance_transactions');
   await logActivity('create', 'finance_debt', debt.id, `${debt.creditor} · ${money(principal)}`, null, debt);
@@ -1551,8 +1563,10 @@ async function createFinanceDebtPayment(input) {
     createdAt: Date.now(),
     updatedAt: Date.now()
   };
-  await DB.put('finance_transactions', tx);
-  await DB.put('finance_debt_payments', payment);
+  await DB.multiTransaction([
+    { store: 'finance_transactions', type: 'put', record: tx },
+    { store: 'finance_debt_payments', type: 'put', record: payment }
+  ]);
   await loadStore('finance_transactions');
   await loadStore('finance_debt_payments');
   await recalcFinanceDebt(debt.id);
@@ -1720,8 +1734,10 @@ async function createFinanceSavingsEntry(input) {
     createdAt: Date.now(),
     updatedAt: Date.now()
   };
-  await DB.put('finance_transactions', tx);
-  await DB.put('finance_savings_entries', entry);
+  await DB.multiTransaction([
+    { store: 'finance_transactions', type: 'put', record: tx },
+    { store: 'finance_savings_entries', type: 'put', record: entry }
+  ]);
   await loadStore('finance_transactions');
   await loadStore('finance_savings_entries');
   await recalcFinanceSavingsGoal(goal.id);
@@ -1907,8 +1923,10 @@ async function createFinanceObligationPayment(input) {
     createdAt: Date.now(),
     updatedAt: Date.now()
   };
-  await DB.put('finance_transactions', tx);
-  await DB.put('finance_obligation_payments', payment);
+  await DB.multiTransaction([
+    { store: 'finance_transactions', type: 'put', record: tx },
+    { store: 'finance_obligation_payments', type: 'put', record: payment }
+  ]);
   await loadStore('finance_transactions');
   await loadStore('finance_obligation_payments');
   await recalcFinanceObligation(obligation.id);
@@ -2101,7 +2119,7 @@ async function deleteFinanceTransaction(id) {
   if (tx.type === 'transfer' && tx.linkedGroupId) {
     const group = state.data.financeTransactions.filter((item) => item.linkedGroupId === tx.linkedGroupId);
     await removeFinanceAttachmentsForTransactions(group.map((item) => item.id));
-    await DB.bulkRemove('finance_transactions', group.map((item) => item.id));
+    await DB.multiTransaction(group.map((item) => ({ store: 'finance_transactions', type: 'delete', record: item })));
     await loadStore('finance_transactions');
     await logActivity('delete', 'finance_transaction', tx.linkedGroupId, 'حذف تحويل داخلي', group, null);
     return;
@@ -2113,8 +2131,10 @@ async function deleteFinanceTransaction(id) {
       throw new Error('لا يمكن حذف أصل الدين لوجود دفعات سداد مسجلة. احذف الدين كاملًا أو الدفعات أولًا.');
     }
     await removeFinanceAttachmentsForTransactions([id]);
-    await DB.remove('finance_transactions', id);
-    if (debt) await DB.remove('finance_debts', debt.id);
+    await DB.multiTransaction([
+      { store: 'finance_transactions', type: 'delete', record: { id } },
+      ...(debt ? [{ store: 'finance_debts', type: 'delete', record: { id: debt.id } }] : [])
+    ]);
     await loadStore('finance_transactions');
     await loadStore('finance_debts');
     await logActivity('delete', 'finance_transaction', id, `أصل دين ${debt?.creditor || ''}`, tx, null);
@@ -2124,9 +2144,9 @@ async function deleteFinanceTransaction(id) {
 
   if (tx.type === 'debt_payment') {
     const payments = state.data.financeDebtPayments.filter((payment) => payment.transactionId === id);
-    if (payments.length) await DB.bulkRemove('finance_debt_payments', payments.map((payment) => payment.id));
+    if (payments.length) await DB.multiTransaction(payments.map((payment) => ({ store: 'finance_debt_payments', type: 'delete', record: payment })));
     await removeFinanceAttachmentsForTransactions([id]);
-    await DB.remove('finance_transactions', id);
+    await DB.multiTransaction([{ store: 'finance_transactions', type: 'delete', record: { id } }]);
     await loadStore('finance_transactions');
     await loadStore('finance_debt_payments');
     if (tx.debtId) await recalcFinanceDebt(tx.debtId);
@@ -2136,9 +2156,9 @@ async function deleteFinanceTransaction(id) {
 
   if (tx.obligationId) {
     const payments = state.data.financeObligationPayments.filter((payment) => payment.transactionId === id);
-    if (payments.length) await DB.bulkRemove('finance_obligation_payments', payments.map((payment) => payment.id));
+    if (payments.length) await DB.multiTransaction(payments.map((payment) => ({ store: 'finance_obligation_payments', type: 'delete', record: payment })));
     await removeFinanceAttachmentsForTransactions([id]);
-    await DB.remove('finance_transactions', id);
+    await DB.multiTransaction([{ store: 'finance_transactions', type: 'delete', record: { id } }]);
     await loadStore('finance_transactions');
     await loadStore('finance_obligation_payments');
     await recalcFinanceObligation(tx.obligationId);
@@ -2149,9 +2169,9 @@ async function deleteFinanceTransaction(id) {
 
   if (tx.savingsGoalId) {
     const entries = state.data.financeSavingsEntries.filter((entry) => entry.transactionId === id);
-    if (entries.length) await DB.bulkRemove('finance_savings_entries', entries.map((entry) => entry.id));
+    if (entries.length) await DB.multiTransaction(entries.map((entry) => ({ store: 'finance_savings_entries', type: 'delete', record: entry })));
     await removeFinanceAttachmentsForTransactions([id]);
-    await DB.remove('finance_transactions', id);
+    await DB.multiTransaction([{ store: 'finance_transactions', type: 'delete', record: { id } }]);
     await loadStore('finance_transactions');
     await loadStore('finance_savings_entries');
     await recalcFinanceSavingsGoal(tx.savingsGoalId);
@@ -2160,7 +2180,7 @@ async function deleteFinanceTransaction(id) {
   }
 
   await removeFinanceAttachmentsForTransactions([id]);
-  await DB.remove('finance_transactions', id);
+  await DB.multiTransaction([{ store: 'finance_transactions', type: 'delete', record: { id } }]);
   await loadStore('finance_transactions');
   await logActivity('delete', 'finance_transaction', id, financeTransactionTitle(tx), tx, null);
 }

@@ -46,6 +46,7 @@ const ENTITY_LABELS = {
   reminder: 'تذكير',
   prayer: 'صلاة',
   adhan_audio: 'صوت أذان',
+  template: 'قالب',
   settings: 'إعدادات',
   finance_account: 'حساب مالي',
   finance_category: 'تصنيف مالي',

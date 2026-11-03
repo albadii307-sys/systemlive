@@ -48,6 +48,18 @@ function openHabitModal(id = null) {
         <div class="field" style="justify-content:flex-end">
           <div class="form-note">${icon('info', 14)}<span>تعديل العادة لا يحذف سجل إنجازاتها السابق، وتُحفظ جميع السجلات مرتبطة بمعرّف العادة.</span></div>
         </div>
+        ${habit ? '' : `
+        <div class="field full" style="border-top:1px solid var(--border);padding-top:10px;margin-top:10px">
+          <div class="row" style="justify-content:space-between;align-items:center">
+            <span class="text-muted small-text">${icon('copy', 13)} قالب:</span>
+            <button class="soft-btn small" data-action="tpl-choose-from" data-type="habit">${icon('folder', 13)} اختيار من القوالب</button>
+          </div>
+          <label class="row" style="cursor:pointer;font-size:12px;margin-top:6px">
+            <input type="checkbox" name="saveAsTemplate">
+            <span>حفظ هذه العادة كقالب لإعادة الاستخدام لاحقًا</span>
+          </label>
+        </div>
+        `}
       </div>
     </form>
   `;
@@ -213,6 +225,18 @@ function openTaskModal(id = null, defaults = {}) {
           </label>
           <span class="help">سيُفتح تذكير في تاريخ ووقت الاستحقاق، ويمكن تعديله لاحقًا من قسم التذكيرات.</span>
         </div>
+        ${task ? '' : `
+        <div class="field full" style="border-top:1px solid var(--border);padding-top:10px;margin-top:10px">
+          <div class="row" style="justify-content:space-between;align-items:center">
+            <span class="text-muted small-text">${icon('copy', 13)} قالب:</span>
+            <button class="soft-btn small" data-action="tpl-choose-from" data-type="task">${icon('folder', 13)} اختيار من القوالب</button>
+          </div>
+          <label class="row" style="cursor:pointer;font-size:12px;margin-top:6px">
+            <input type="checkbox" name="saveAsTemplate">
+            <span>حفظ هذه المهمة كقالب لإعادة الاستخدام لاحقًا</span>
+          </label>
+        </div>
+        `}
       </div>
     </form>
   `;
@@ -282,6 +306,18 @@ function openGoalModal(id = null) {
           <label>اللون</label>
           <div class="color-picker">${colorSwatches}</div>
         </div>
+        ${goal ? '' : `
+        <div class="field full" style="border-top:1px solid var(--border);padding-top:10px;margin-top:10px">
+          <div class="row" style="justify-content:space-between;align-items:center">
+            <span class="text-muted small-text">${icon('copy', 13)} قالب:</span>
+            <button class="soft-btn small" data-action="tpl-choose-from" data-type="goal">${icon('folder', 13)} اختيار من القوالب</button>
+          </div>
+          <label class="row" style="cursor:pointer;font-size:12px;margin-top:6px">
+            <input type="checkbox" name="saveAsTemplate">
+            <span>حفظ هذا الهدف كقالب لإعادة الاستخدام لاحقًا</span>
+          </label>
+        </div>
+        `}
       </div>
     </form>
   `;
@@ -584,6 +620,18 @@ function openReminderModal(id = null, defaults = {}) {
         <div class="field full">
           <div class="form-note">${icon('bell', 14)}<span>سيظهر التذكير داخل التطبيق، ومع إذن المتصفح ستظهر إشعارات أثناء فتح التطبيق. التكرار المتكرر يُحسب تلقائيًا من تاريخ البداية.</span></div>
         </div>
+        ${reminder ? '' : `
+        <div class="field full" style="border-top:1px solid var(--border);padding-top:10px;margin-top:10px">
+          <div class="row" style="justify-content:space-between;align-items:center">
+            <span class="text-muted small-text">${icon('copy', 13)} قالب:</span>
+            <button class="soft-btn small" data-action="tpl-choose-from" data-type="reminder">${icon('folder', 13)} اختيار من القوالب</button>
+          </div>
+          <label class="row" style="cursor:pointer;font-size:12px;margin-top:6px">
+            <input type="checkbox" name="saveAsTemplate">
+            <span>حفظ هذا التذكير كقالب لإعادة الاستخدام لاحقًا</span>
+          </label>
+        </div>
+        `}
       </div>
     </form>
   `;
@@ -594,7 +642,7 @@ function openReminderModal(id = null, defaults = {}) {
     content,
     footer: `
       <button class="ghost-btn" data-modal-close>إلغاء</button>
-      <div class="spacer"></div>
+      <div class="spacer"></button>
       <button class="primary-btn" type="submit" form="reminder-form">${icon('check', 15)} ${reminder ? 'حفظ التعديلات' : 'إضافة التذكير'}</button>
     `
   });
@@ -774,4 +822,557 @@ function openActivityDetail(id) {
     `,
     footer: `<button class="ghost-btn" data-modal-close>إغلاق</button>`
   });
+}
+
+/* ---------------- مكتبة القوالب (مركزي) ---------------- */
+
+const TEMPLATE_TYPE_LABELS = {
+  task: 'مهمة',
+  goal: 'هدف',
+  habit: 'عادة',
+  reminder: 'تذكير',
+  finance_expense: 'مصروف',
+  finance_income: 'دخل / راتب',
+  finance_obligation: 'التزام',
+  finance_debt: 'دين',
+  finance_savings_goal: 'هدف ادخار',
+  event: 'حدث'
+};
+
+const TEMPLATE_TYPE_ICONS = {
+  task: 'list-check',
+  goal: 'target',
+  habit: 'check-circle',
+  reminder: 'bell',
+  finance_expense: 'receipt',
+  finance_income: 'arrow-down-left',
+  finance_obligation: 'bell',
+  finance_debt: 'scale',
+  finance_savings_goal: 'piggy-bank',
+  event: 'calendar'
+};
+
+function templateTypeLabel(type) {
+  return TEMPLATE_TYPE_LABELS[type] || type;
+}
+
+function templateTypeIcon(type) {
+  return icon(TEMPLATE_TYPE_ICONS[type] || 'circle', 14);
+}
+
+function renderTemplatesModal() {
+  const templates = state.data.templates || [];
+  const typeFilter = state.ui.templateTypeFilter || 'all';
+  const query = (state.ui.templateQuery || '').toLowerCase();
+  const showFav = state.ui.templateShowFav === true;
+
+  let list = templates;
+  if (typeFilter !== 'all') list = list.filter((t) => t.entityType === typeFilter);
+  if (showFav) list = list.filter((t) => t.isFavorite);
+  if (query) {
+    list = list.filter((t) =>
+      t.name.toLowerCase().includes(query)
+      || (t.description || '').toLowerCase().includes(query)
+      || templateTypeLabel(t.entityType).toLowerCase().includes(query)
+    );
+  }
+  list = sortBy(list, (t) => (t.isFavorite ? 0 : 1) * 1000000 - (t.useCount || 0) - (t.lastUsedAt || 0));
+
+  const typeOptions = TEMPLATE_ENTITY_TYPES.map((t) => `
+    <option value="${t}" ${typeFilter === t ? 'selected' : ''}>${templateTypeLabel(t)}</option>
+  `).join('');
+
+  const rows = list.length ? list.map((t) => {
+    const usedAgo = t.lastUsedAt ? `· استخدم منذ ${timeAgo(t.lastUsedAt)}` : '';
+    return `
+      <div class="template-row" data-template-id="${t.id}">
+        <div class="template-row-main">
+          <div class="template-row-icon">${templateTypeIcon(t.entityType)}</div>
+          <div class="template-row-info">
+            <div class="template-row-title">${escapeHtml(t.name)}${t.isFavorite ? ' ' + icon('star', 12) : ''}</div>
+            <div class="template-row-meta">${templateTypeLabel(t.entityType)} ${usedAgo ? '· ' : ''}${usedAgo} ${t.useCount ? `· استخدامات ${t.useCount}` : ''}</div>
+            ${t.description ? `<div class="template-row-desc">${escapeHtml(t.description)}</div>` : ''}
+          </div>
+        </div>
+        <div class="template-row-actions">
+          <button class="soft-btn small" data-action="tpl-use" data-id="${t.id}">${icon('play', 12)} استخدام</button>
+          <button class="ghost-btn small" data-action="tpl-edit" data-id="${t.id}">${icon('edit', 12)}</button>
+          <button class="${t.isFavorite ? 'soft-btn' : 'ghost-btn'} small" data-action="tpl-fav" data-id="${t.id}">${icon('star', 12)}</button>
+          <button class="danger-btn small" data-action="tpl-delete" data-id="${t.id}">${icon('trash', 12)}</button>
+        </div>
+      </div>
+    `;
+  }).join('') : '<div class="empty-state"><div class="empty-icon">'+icon('copy', 20)+'</div><h4>لا توجد قوالب محفوظة</h4><p>أنشئ عنصرًا واختر "حفظ كقالب" لإعادة استخدامه لاحقًا.</p></div>';
+
+  const content = `
+    <div class="row wrap mb-3" style="gap:8px;align-items:flex-end">
+      <select class="input" id="tpl-type-filter" style="max-width:170px">${typeOptions}</select>
+      <input class="input" id="tpl-search" placeholder="البحث في القوالب..." value="${escapeAttr(state.ui.templateQuery || '')}" style="flex:1;max-width:260px">
+      <label class="row" style="cursor:pointer;font-size:12px;margin:0">
+        <input type="checkbox" id="tpl-fav-only" ${showFav ? 'checked' : ''}>
+        <span>المفضلة فقط</span>
+      </label>
+    </div>
+    <div class="card"><div class="card-body">${rows}</div></div>
+  `;
+
+  openModal({
+    title: 'مكتبة القوالب',
+    subtitle: 'أعد استخدام العناصر التي أنشأتها سابقًا دون إعادة كتابتها',
+    size: 'lg',
+    content,
+    footer: `
+      <button class="ghost-btn" data-modal-close>إغلاق</button>
+      <div class="spacer"></div>
+      <button class="primary-btn" data-action="tpl-new">${icon('plus', 14)} إنشاء قالب جديد</button>
+    `
+  });
+
+  const overlay = document.querySelector('.modal-overlay');
+  overlay.querySelector('#tpl-type-filter')?.addEventListener('change', (e) => {
+    state.ui.templateTypeFilter = e.target.value;
+    state.ui.templateQuery = '';
+    renderTemplatesModal();
+  });
+  overlay.querySelector('#tpl-search')?.addEventListener('input', (e) => {
+    state.ui.templateQuery = e.target.value;
+    renderTemplatesModal();
+  });
+  overlay.querySelector('#tpl-fav-only')?.addEventListener('change', (e) => {
+    state.ui.templateShowFav = e.target.checked;
+    renderTemplatesModal();
+  });
+}
+
+function openTemplateEditor(id = null) {
+  const template = id ? getTemplate(id) : null;
+  const data = template || {
+    entityType: 'task',
+    name: '',
+    description: '',
+    tags: [],
+    data: {}
+  };
+  const typeOptions = TEMPLATE_ENTITY_TYPES.map((t) => `
+    <option value="${t}" ${data.entityType === t ? 'selected' : ''}>${templateTypeLabel(t)}</option>
+  `).join('');
+  const content = `
+    <form id="tpl-form" data-id="${template?.id || ''}">
+      <div class="form-grid">
+        <div class="field">
+          <label for="tpl-type">نوع العنصر <span class="req">*</span></label>
+          <select id="tpl-type" name="entityType">${typeOptions}</select>
+        </div>
+        <div class="field full">
+          <label for="tpl-name">اسم القالب <span class="req">*</span></label>
+          <input id="tpl-name" name="name" type="text" maxlength="100" value="${escapeAttr(data.name)}" required placeholder="مثال: مهمة تقرير أسبوعي">
+        </div>
+        <div class="field full">
+          <label for="tpl-desc">وصف القالب (اختياري)</label>
+          <input id="tpl-desc" name="description" type="text" maxlength="160" value="${escapeAttr(data.description || '')}" placeholder="ما الغرض من هذا القالب؟">
+        </div>
+        <div class="field full">
+          <label for="tpl-tags">التصنيفات/العلامات (اختياري، مفصولة بفاصلة)</label>
+          <input id="tpl-tags" name="tags" type="text" maxlength="120" value="${escapeAttr(Array.isArray(data.tags) ? data.tags.join(', ') : '')}" placeholder="عمل، عاجل، monthly...">
+        </div>
+      </div>
+      <div class="form-note mt-2">${icon('info', 14)}<span>تُستخدم البيانات الافتراضية من العنصر الأصلي عند الإنشاء من هذا القالب، ويمكن تعديلها قبل الحفظ.</span></div>
+    </form>
+  `;
+  openModal({
+    title: template ? 'تعديل القالب' : 'قالب جديد',
+    subtitle: 'حدد نوع العنصر والبيانات التي سيتم إعادة استخدامها',
+    content,
+    footer: `
+      <button class="ghost-btn" data-modal-close>إلغاء</button>
+      <div class="spacer"></div>
+      <button class="primary-btn" type="submit" form="tpl-form">${icon('check', 15)} ${template ? 'حفظ التعديلات' : 'إنشاء القالب'}</button>
+    `
+  });
+}
+
+function handleTemplateAction(action, id) {
+  switch (action) {
+    case 'tpl-new':
+      closeAllModals();
+      openTemplateEditor();
+      return true;
+    case 'tpl-use':
+      closeAllModals();
+      openTemplateUseModal(id);
+      return true;
+    case 'tpl-edit':
+      closeAllModals();
+      openTemplateEditor(id);
+      return true;
+    case 'tpl-fav':
+      toggleTemplateFavorite(id).then(() => renderTemplatesModal()).catch((err) => showToast({ type: 'error', title: 'فشل', message: err.message }));
+      return true;
+    case 'tpl-delete':
+      closeAllModals();
+      confirmAction({
+        title: 'حذف القالب؟',
+        message: 'سيُحذف القالب نهائيًا ولا يؤثر على العناصر المنشأة منه سابقًا.',
+        confirmText: 'حذف', danger: true
+      }).then(async (ok) => {
+        if (!ok) return;
+        try {
+          await deleteTemplate(id);
+          renderTemplatesModal();
+          showToast({ title: 'تم حذف القالب' });
+        } catch (e) { showToast({ type: 'error', title: 'فشل الحذف', message: e.message }); }
+      });
+      return true;
+  }
+  return false;
+}
+
+async function openTemplateUseModal(templateId) {
+  const template = getTemplate(templateId);
+  if (!template) return;
+  const { entityType, data } = template;
+
+  let fieldsHtml = '';
+  let formId = 'tpl-use-form';
+  let submitLabel = 'إنشاء العنصر';
+
+  switch (entityType) {
+    case 'task':
+      fieldsHtml = `
+        <div class="field full">
+          <label for="tpl-use-title">عنوان المهمة <span class="req">*</span></label>
+          <input id="tpl-use-title" name="title" type="text" value="${escapeAttr(data.title || template.name)}" required>
+        </div>
+        <div class="field full">
+          <label for="tpl-use-desc">الوصف</label>
+          <textarea id="tpl-use-desc" name="description">${escapeHtml(data.description || '')}</textarea>
+        </div>
+        <div class="field">
+          <label for="tpl-use-priority">الأولوية</label>
+          <select id="tpl-use-priority" name="priority">
+            ${Object.entries(PRIORITY_LABELS).map(([k, l]) => `<option value="${k}" ${data.priority === k ? 'selected' : ''}>${l}</option>`).join('')}
+          </select>
+        </div>
+        <div class="field">
+          <label for="tpl-use-category">التصنيف</label>
+          <input id="tpl-use-category" name="category" type="text" value="${escapeAttr(data.category || '')}">
+        </div>
+      `;
+      break;
+    case 'goal':
+      fieldsHtml = `
+        <div class="field full">
+          <label for="tpl-use-title">عنوان الهدف <span class="req">*</span></label>
+          <input id="tpl-use-title" name="title" type="text" value="${escapeAttr(data.title || template.name)}" required>
+        </div>
+        <div class="field full">
+          <label for="tpl-use-desc">الوصف</label>
+          <textarea id="tpl-use-desc" name="description">${escapeHtml(data.description || '')}</textarea>
+        </div>
+        <div class="field">
+          <label for="tpl-use-target">القيمة المستهدفة</label>
+          <input id="tpl-use-target" name="targetValue" type="number" min="0.01" step="any" value="${data.targetValue || 100}" required>
+        </div>
+        <div class="field">
+          <label for="tpl-use-unit">الوحدة</label>
+          <input id="tpl-use-unit" name="unit" type="text" value="${escapeAttr(data.unit || '')}">
+        </div>
+      `;
+      break;
+    case 'habit':
+      fieldsHtml = `
+        <div class="field full">
+          <label for="tpl-use-name">اسم العادة <span class="req">*</span></label>
+          <input id="tpl-use-name" name="name" type="text" value="${escapeAttr(data.name || template.name)}" required>
+        </div>
+        <div class="field full">
+          <label for="tpl-use-desc">الوصف</label>
+          <input id="tpl-use-desc" name="description" type="text" value="${escapeHtml(data.description || '')}">
+        </div>
+      `;
+      break;
+    case 'reminder':
+    case 'event':
+      fieldsHtml = `
+        <div class="field full">
+          <label for="tpl-use-title">العنوان <span class="req">*</span></label>
+          <input id="tpl-use-title" name="title" type="text" value="${escapeAttr(data.title || template.name)}" required>
+        </div>
+        <div class="field full">
+          <label for="tpl-use-desc">الوصف</label>
+          <textarea id="tpl-use-desc" name="description">${escapeHtml(data.description || '')}</textarea>
+        </div>
+        <div class="field">
+          <label for="tpl-use-date">التاريخ</label>
+          <input id="tpl-use-date" name="date" type="date" value="${data.date || todayISO()}">
+        </div>
+        <div class="field">
+          <label for="tpl-use-time">الوقت</label>
+          <input id="tpl-use-time" name="time" type="time" value="${data.time || '09:00'}">
+        </div>
+      `;
+      break;
+    case 'finance_expense':
+      fieldsHtml = `
+        <div class="field full">
+          <label for="tpl-use-name">اسم المصروف <span class="req">*</span></label>
+          <input id="tpl-use-name" name="name" type="text" value="${escapeAttr(data.merchant || template.name)}" required>
+        </div>
+        <div class="field">
+          <label for="tpl-use-amount">المبلغ <span class="req">*</span></label>
+          <input id="tpl-use-amount" name="amount" type="number" min="0.001" step="0.001" value="${data.amount || ''}" required>
+        </div>
+        <div class="field">
+          <label for="tpl-use-account">الحساب</label>
+          ${financeAccountSelect('tpl-use-account', data.accountId || '', false, 'all', 'accountId')}
+        </div>
+        <div class="field">
+          <label for="tpl-use-category">التصنيف</label>
+          ${financeCategorySelect('tpl-use-category', 'expense', data.categoryId || '', true, 'categoryId')}
+        </div>
+      `;
+      submitLabel = 'إضافة المصروف';
+      break;
+    case 'finance_income':
+      fieldsHtml = `
+        <div class="field full">
+          <label for="tpl-use-name">مصدر الدخل <span class="req">*</span></label>
+          <input id="tpl-use-name" name="name" type="text" value="${escapeAttr(data.counterparty || template.name)}" required>
+        </div>
+        <div class="field">
+          <label for="tpl-use-amount">المبلغ <span class="req">*</span></label>
+          <input id="tpl-use-amount" name="amount" type="number" min="0.001" step="0.001" value="${data.amount || ''}" required>
+        </div>
+        <div class="field">
+          <label for="tpl-use-account">الحساب</label>
+          ${financeAccountSelect('tpl-use-account', data.accountId || '', false, 'all', 'accountId')}
+        </div>
+        <div class="field">
+          <label for="tpl-use-kind">نوع الدخل</label>
+          <select id="tpl-use-kind" name="incomeKind">
+            ${Object.entries(FINANCE_INCOME_KINDS).map(([k, l]) => `<option value="${k}" ${data.incomeKind === k ? 'selected' : ''}>${l}</option>`).join('')}
+          </select>
+        </div>
+      `;
+      submitLabel = 'تسجيل الدخل';
+      break;
+    case 'finance_obligation':
+      fieldsHtml = `
+        <div class="field full">
+          <label for="tpl-use-name">اسم الالتزام <span class="req">*</span></label>
+          <input id="tpl-use-name" name="name" type="text" value="${escapeAttr(data.name || template.name)}" required>
+        </div>
+        <div class="field">
+          <label for="tpl-use-amount">المبلغ المتوقع <span class="req">*</span></label>
+          <input id="tpl-use-amount" name="expectedAmount" type="number" min="0.001" step="0.001" value="${data.expectedAmount || ''}" required>
+        </div>
+        <div class="field">
+          <label for="tpl-use-date">تاريخ الاستحقاق <span class="req">*</span></label>
+          <input id="tpl-use-date" name="dueDate" type="date" value="${data.dueDate || todayISO()}" required>
+        </div>
+        <div class="field">
+          <label for="tpl-use-recurrence">التكرار</label>
+          <select id="tpl-use-recurrence" name="recurrence">
+            ${Object.entries(FINANCE_RECURRENCE).map(([k, l]) => `<option value="${k}" ${data.recurrence === k ? 'selected' : ''}>${l}</option>`).join('')}
+          </select>
+        </div>
+      `;
+      submitLabel = 'إضافة الالتزام';
+      break;
+    case 'finance_debt':
+      fieldsHtml = `
+        <div class="field full">
+          <label for="tpl-use-name">اسم الدائن <span class="req">*</span></label>
+          <input id="tpl-use-name" name="creditor" type="text" value="${escapeAttr(data.creditor || template.name)}" required>
+        </div>
+        <div class="field">
+          <label for="tpl-use-amount">أصل الدين <span class="req">*</span></label>
+          <input id="tpl-use-amount" name="principal" type="number" min="0.001" step="0.001" value="${data.principal || ''}" required>
+        </div>
+        <div class="field">
+          <label for="tpl-use-account">الحساب</label>
+          ${financeAccountSelect('tpl-use-account', data.accountId || '', false, 'all', 'accountId')}
+        </div>
+      `;
+      submitLabel = 'إضافة الدين';
+      break;
+    case 'finance_savings_goal':
+      fieldsHtml = `
+        <div class="field full">
+          <label for="tpl-use-name">اسم هدف الادخار <span class="req">*</span></label>
+          <input id="tpl-use-name" name="name" type="text" value="${escapeAttr(data.name || template.name)}" required>
+        </div>
+        <div class="field">
+          <label for="tpl-use-target">المبلغ المستهدف <span class="req">*</span></label>
+          <input id="tpl-use-target" name="targetAmount" type="number" min="0.001" step="0.001" value="${data.targetAmount || ''}" required>
+        </div>
+        <div class="field">
+          <label for="tpl-use-account">الحساب</label>
+          ${financeAccountSelect('tpl-use-account', data.accountId || '', false, 'all', 'accountId')}
+        </div>
+      `;
+      submitLabel = 'إضافة هدف الادخار';
+      break;
+  }
+
+  const content = `
+    <div class="banner"><span class="banner-icon">${templateTypeIcon(entityType)}</span><div><strong>استخدام القالب: ${escapeHtml(template.name)}</strong><p>يمكنك تعديل التفاصيل قبل إنشاء العنصر الجديد. سيُنشأ عنصر بمعرّف مستقل ولا يتم نسخ حالة الإنجاز أو التواريخ القديمة.</p></div></div>
+    <form id="${formId}">
+      <div class="form-grid mt-2">${fieldsHtml}</div>
+    </form>
+  `;
+
+  const close = openModal({
+    title: `إنشاء من القالب: ${template.name}`,
+    subtitle: templateTypeLabel(entityType),
+    size: 'lg',
+    content,
+    footer: `
+      <button class="ghost-btn" data-modal-close>إلغاء</button>
+      <div class="spacer"></div>
+      <button class="primary-btn" type="submit" form="${formId}">${icon('plus', 14)} ${submitLabel}</button>
+    `
+  });
+
+  const form = document.getElementById(formId);
+  form?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const fd = new FormData(form);
+    const fdObj = {};
+    for (const [k, v] of fd.entries()) fdObj[k] = v;
+
+    let overrides = {};
+    switch (entityType) {
+      case 'task':
+        overrides = {
+          title: fdObj.title,
+          description: fdObj.description,
+          priority: fdObj.priority,
+          status: 'new',
+          category: fdObj.category,
+          dueDate: '',
+          dueTime: '',
+          goalId: '',
+          subtasks: (data.subtasks || []).map((s) => ({ id: s.id || uid('sub'), title: s.title, done: false })).filter((s) => s.title)
+        };
+        break;
+      case 'goal':
+        overrides = {
+          title: fdObj.title,
+          description: fdObj.description,
+          startDate: todayISO(),
+          endDate: addDaysISO(todayISO(), 30),
+          targetValue: Number(fdObj.targetValue) || 100,
+          currentValue: 0,
+          unit: fdObj.unit,
+          color: data.color || '#b58cff',
+          status: 'active',
+          progressHistory: []
+        };
+        break;
+      case 'habit':
+        overrides = {
+          name: fdObj.name,
+          description: fdObj.description,
+          color: data.color || '#35e0b5',
+          days: data.days || [0, 1, 2, 3, 4, 5, 6],
+          weeklyGoal: data.weeklyGoal || 7
+        };
+        break;
+      case 'reminder':
+      case 'event':
+        overrides = {
+          title: fdObj.title,
+          description: fdObj.description,
+          date: fdObj.date || todayISO(),
+          time: fdObj.time || '09:00',
+          repeat: data.repeat || 'once',
+          weekdays: data.weekdays || [],
+          customInterval: data.customInterval || 2,
+          linkType: '',
+          linkId: '',
+          status: 'active',
+          notifiedKeys: [],
+          completedAt: null,
+          snoozeUntil: null
+        };
+        break;
+      case 'finance_expense':
+        overrides = {
+          amount: fdObj.amount,
+          accountId: fdObj.accountId || financeSettings().defaultAccountId,
+          categoryId: fdObj.categoryId || 'cat_exp_other',
+          date: todayISO(),
+          time: nowHHMM(),
+          paymentMethod: data.paymentMethod || 'cash',
+          merchant: fdObj.name,
+          notes: ''
+        };
+        break;
+      case 'finance_income':
+        overrides = {
+          amount: fdObj.amount,
+          accountId: fdObj.accountId || financeSettings().defaultAccountId,
+          categoryId: fdObj.categoryId || 'cat_inc_salary',
+          incomeKind: fdObj.incomeKind || 'salary',
+          date: todayISO(),
+          time: nowHHMM(),
+          counterparty: fdObj.name,
+          notes: '',
+          scheduleId: ''
+        };
+        break;
+      case 'finance_obligation':
+        overrides = {
+          name: fdObj.name,
+          accountId: fdObj.accountId || financeSettings().defaultAccountId,
+          expectedAmount: fdObj.expectedAmount,
+          dueDate: fdObj.dueDate || todayISO(),
+          recurrence: fdObj.recurrence || 'monthly',
+          type: data.type || 'bill',
+          categoryId: data.categoryId || 'cat_exp_other',
+          reminderEnabled: data.reminderEnabled !== false,
+          reminderTime: data.reminderTime || '09:00',
+          notes: '',
+          status: 'active'
+        };
+        break;
+      case 'finance_debt':
+        overrides = {
+          creditor: fdObj.name,
+          principal: fdObj.amount,
+          accountId: fdObj.accountId || financeSettings().defaultAccountId,
+          date: todayISO(),
+          dueDate: '',
+          notes: '',
+          reminderEnabled: data.reminderEnabled !== false
+        };
+        break;
+      case 'finance_savings_goal':
+        overrides = {
+          name: fdObj.name,
+          targetAmount: fdObj.targetAmount,
+          accountId: fdObj.accountId || financeSettings().defaultAccountId,
+          startDate: todayISO(),
+          targetDate: addMonthsISO(todayISO(), 6),
+          notes: '',
+          linkedGoalId: '',
+          status: 'active',
+          color: data.color || '#35e0b5'
+        };
+        break;
+    }
+
+    try {
+      await incrementTemplateUse(templateId);
+      await applyTemplate(templateId, overrides);
+      close();
+      closeAllModals();
+      refreshUI();
+      showToast({ title: 'تم إنشاء العنصر من القالب', message: `استُخدم القالب "${escapeHtml(template.name)}"` });
+    } catch (error) {
+      console.error(error);
+      showToast({ type: 'error', title: 'فشل الإنشاء', message: error.message });
+    }
+  }, { once: true });
 }

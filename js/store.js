@@ -43,7 +43,8 @@ const state = {
     financeSavingsEntries: [],
     financeBudgets: [],
     financeIncomeSchedules: [],
-    financeAttachments: []
+    financeAttachments: [],
+    templates: []
   },
   settings: { ...DEFAULT_SETTINGS },
   ui: {
@@ -80,7 +81,10 @@ const state = {
     financeLocked: true,
     financeCursor: todayISO(),
     financeReportTab: 'overview',
-    sidebarOpen: false
+    sidebarOpen: false,
+    templateTypeFilter: 'all',
+    templateQuery: '',
+    templateShowFav: false
   }
 };
 
@@ -107,6 +111,7 @@ const STORE_PROP = {
   finance_budgets: 'financeBudgets',
   finance_income_schedules: 'financeIncomeSchedules',
   finance_attachments: 'financeAttachments',
+  templates: 'templates',
   settings: 'settings'
 };
 
@@ -143,7 +148,7 @@ async function loadAllData() {
     habits, habitLogs, tasks, goals, milestones, sleep, reminders, prayerLogs, adhanLibrary, activity,
     financeAccounts, financeCategories, financeTransactions, financeObligations, financeObligationPayments,
     financeDebts, financeDebtPayments, financeSavingsGoals, financeSavingsEntries, financeBudgets,
-    financeIncomeSchedules, financeAttachments, settingsRecord
+    financeIncomeSchedules, financeAttachments, templates, settingsRecord
   ] = await Promise.all([
     DB.getAll('habits'),
     DB.getAll('habit_logs'),
@@ -167,6 +172,7 @@ async function loadAllData() {
     DB.getAll('finance_budgets'),
     DB.getAll('finance_income_schedules'),
     DB.getAll('finance_attachments'),
+    DB.getAll('templates'),
     DB.get('settings', 'general')
   ]);
 
@@ -192,6 +198,7 @@ async function loadAllData() {
   state.data.financeBudgets = financeBudgets;
   state.data.financeIncomeSchedules = financeIncomeSchedules;
   state.data.financeAttachments = financeAttachments;
+  state.data.templates = templates;
 
   if (settingsRecord && settingsRecord.value && typeof settingsRecord.value === 'object') {
     state.settings = { ...DEFAULT_SETTINGS, ...settingsRecord.value };
@@ -1076,6 +1083,321 @@ function activeGoals() {
   return state.data.goals.filter((goal) => goal.status === 'active');
 }
 
+/* ---------------- مكتبة القوالب (مركزي وقابل للتوسع) ---------------- */
+
+const TEMPLATE_ENTITY_TYPES = ['task', 'goal', 'habit', 'reminder', 'finance_expense', 'finance_income', 'finance_obligation', 'finance_debt', 'finance_savings_goal', 'event'];
+
+function normalizeTemplate(input, existing = {}) {
+  const entityType = input.entityType || existing.entityType || 'task';
+  if (!TEMPLATE_ENTITY_TYPES.includes(entityType)) throw new Error('نوع العنصر غير صالح');
+  const name = String(input.name ?? existing.name ?? '').trim();
+  if (!name) throw new Error('اسم القالب مطلوب');
+  return {
+    id: existing.id || input.id || uid('tpl'),
+    entityType,
+    name,
+    description: String(input.description ?? existing.description ?? '').trim(),
+    data: input.data ?? existing.data ?? {},
+    tags: Array.isArray(input.tags) ? input.tags : (existing.tags || []),
+    isFavorite: input.isFavorite ?? existing.isFavorite ?? false,
+    useCount: Number(existing.useCount) || 0,
+    lastUsedAt: existing.lastUsedAt || null,
+    createdAt: existing.createdAt || input.createdAt || Date.now(),
+    updatedAt: Date.now()
+  };
+}
+
+async function createTemplate(input) {
+  const template = normalizeTemplate(input);
+  await DB.put('templates', template);
+  await logActivity('create', 'template', template.id, template.name, null, template);
+  await loadStore('templates');
+  return template;
+}
+
+async function updateTemplate(id, input) {
+  const old = byId(state.data.templates, id);
+  if (!old) throw new Error('القالب غير موجود');
+  const updated = normalizeTemplate(input, old);
+  if (!updated.name) throw new Error('اسم القالب مطلوب');
+  await DB.put('templates', updated);
+  await logActivity('update', 'template', updated.id, updated.name, old, updated);
+  await loadStore('templates');
+  return updated;
+}
+
+async function deleteTemplate(id) {
+  const old = byId(state.data.templates, id);
+  if (!old) throw new Error('القالب غير موجود');
+  await DB.remove('templates', id);
+  await logActivity('delete', 'template', id, old.name, old, null);
+  await loadStore('templates');
+}
+
+function getTemplates(entityType = '', options = {}) {
+  let list = state.data.templates;
+  if (entityType) list = list.filter((t) => t.entityType === entityType);
+  if (options.favorites) list = list.filter((t) => t.isFavorite);
+  list = sortBy(list, (t) => (t.lastUsedAt || t.createdAt), 'desc');
+  return list;
+}
+
+function getTemplate(id) {
+  return byId(state.data.templates, id);
+}
+
+async function toggleTemplateFavorite(id) {
+  const template = byId(state.data.templates, id);
+  if (!template) throw new Error('القالب غير موجود');
+  const next = { ...template, isFavorite: !template.isFavorite, updatedAt: Date.now() };
+  await DB.put('templates', next);
+  await logActivity(next.isFavorite ? 'update' : 'update', 'template', id, template.name, template, next, { favorite: next.isFavorite });
+  await loadStore('templates');
+  return next;
+}
+
+async function incrementTemplateUse(id) {
+  const template = byId(state.data.templates, id);
+  if (!template) return;
+  const next = {
+    ...template,
+    useCount: (Number(template.useCount) || 0) + 1,
+    lastUsedAt: Date.now(),
+    updatedAt: Date.now()
+  };
+  await DB.put('templates', next);
+  await loadStore('templates');
+  return next;
+}
+
+/**
+ * ينشئ عنصرًا جديدًا من قالب، مع إمكانيةOverride بعض الحقول.
+ * لا ينسخ المعرّفات القديمة ولا تواريخ التنفيذ ولا حالات الإنجاز.
+ */
+async function applyTemplate(templateId, overrides = {}) {
+  const template = getTemplate(templateId);
+  if (!template) throw new Error('القالب غير موجود');
+
+  const { entityType, data } = template;
+  const input = { ...data, ...overrides };
+  input.entityType = undefined; // لا نُمرّر entityType إلى دالة الإنشاء
+
+  switch (entityType) {
+    case 'task': {
+      const { id: _, ...rest } = input;
+      return await createTask(rest);
+    }
+    case 'goal': {
+      const { id: _, ...rest } = input;
+      return await createGoal(rest);
+    }
+    case 'habit': {
+      const { id: _, ...rest } = input;
+      return await createHabit(rest);
+    }
+    case 'reminder': {
+      const { id: _, ...rest } = input;
+      return await createReminder(rest);
+    }
+    case 'finance_expense': {
+      const { id: _, ...rest } = input;
+      return await createFinanceExpense(rest);
+    }
+    case 'finance_income': {
+      const { id: _, ...rest } = input;
+      return await createFinanceIncome(rest);
+    }
+    case 'finance_obligation': {
+      const { id: _, ...rest } = input;
+      return await createFinanceObligation(rest);
+    }
+    case 'finance_debt': {
+      const { id: _, ...rest } = input;
+      return await createFinanceDebt(rest);
+    }
+    case 'finance_savings_goal': {
+      const { id: _, ...rest } = input;
+      return await createFinanceSavingsGoal(rest);
+    }
+    case 'event': {
+      const { id: _, ...rest } = input;
+      return await createReminder({ ...rest, linkType: '', linkId: '' });
+    }
+    default:
+      throw new Error('نوع العنصر غير مدعوم');
+  }
+}
+
+/**
+ * يستخرج بيانات القالب من عنصر موجود (عند اختيار "حفظ كقالب").
+ */
+function extractTemplateData(entityType, record) {
+  const base = {
+    entityType,
+    name: record.name || record.title || record.creditor || 'عنصر غير مسمّى',
+    description: record.description || record.notes || '',
+    tags: []
+  };
+  switch (entityType) {
+    case 'task':
+      return {
+        ...base,
+        data: {
+          title: record.title,
+          description: record.description || '',
+          priority: record.priority || 'medium',
+          status: record.status || 'new',
+          category: record.category || '',
+          dueDate: '',
+          dueTime: record.dueTime || '',
+          goalId: '',
+          subtasks: (record.subtasks || []).map((s) => ({ id: s.id, title: s.title, done: false })).filter((s) => s.title)
+        },
+        tags: record.category ? [record.category] : []
+      };
+    case 'goal':
+      return {
+        ...base,
+        data: {
+          title: record.title,
+          description: record.description || '',
+          startDate: record.startDate || todayISO(),
+          endDate: record.endDate || addDaysISO(todayISO(), 30),
+          targetValue: record.targetValue || 100,
+          currentValue: 0,
+          unit: record.unit || '',
+          color: record.color || '#b58cff',
+          status: 'active',
+          progressHistory: []
+        },
+        tags: []
+      };
+    case 'habit':
+      return {
+        ...base,
+        data: {
+          name: record.name,
+          description: record.description || '',
+          color: record.color || '#35e0b5',
+          days: record.days || [0, 1, 2, 3, 4, 5, 6],
+          weeklyGoal: record.weeklyGoal || 7
+        },
+        tags: []
+      };
+    case 'reminder':
+      return {
+        ...base,
+        data: {
+          title: record.title,
+          description: record.description || '',
+          date: '',
+          time: record.time || '09:00',
+          repeat: record.repeat || 'once',
+          weekdays: record.weekdays || [],
+          customInterval: record.customInterval || 2,
+          linkType: '',
+          linkId: ''
+        },
+        tags: record.linkType ? [record.linkType] : []
+      };
+    case 'finance_expense':
+      return {
+        ...base,
+        data: {
+          amount: record.amount || 0,
+          accountId: record.accountId || financeSettings().defaultAccountId,
+          categoryId: record.categoryId || 'cat_exp_other',
+          date: '',
+          time: nowHHMM(),
+          paymentMethod: record.paymentMethod || 'cash',
+          merchant: record.merchant || '',
+          notes: record.notes || ''
+        },
+        tags: record.categoryId ? [financeCategoryName(record.categoryId)] : []
+      };
+    case 'finance_income':
+      return {
+        ...base,
+        data: {
+          amount: record.amount || 0,
+          accountId: record.accountId || financeSettings().defaultAccountId,
+          categoryId: record.categoryId || 'cat_inc_salary',
+          incomeKind: record.incomeKind || 'salary',
+          date: '',
+          time: nowHHMM(),
+          counterparty: record.counterparty || '',
+          notes: record.notes || '',
+          scheduleId: ''
+        },
+        tags: []
+      };
+    case 'finance_obligation':
+      return {
+        ...base,
+        data: {
+          name: record.name,
+          accountId: record.accountId || financeSettings().defaultAccountId,
+          expectedAmount: record.expectedAmount || 0,
+          dueDate: '',
+          recurrence: record.recurrence || 'monthly',
+          type: record.type || 'bill',
+          categoryId: record.categoryId || 'cat_exp_other',
+          reminderEnabled: record.reminderEnabled !== false,
+          reminderTime: record.reminderTime || '09:00',
+          notes: record.notes || '',
+          status: 'active'
+        },
+        tags: []
+      };
+    case 'finance_debt':
+      return {
+        ...base,
+        data: {
+          creditor: record.creditor || '',
+          principal: record.principal || 0,
+          accountId: record.accountId || financeSettings().defaultAccountId,
+          date: todayISO(),
+          dueDate: record.dueDate || '',
+          notes: record.notes || '',
+          reminderEnabled: record.reminderEnabled !== false
+        },
+        tags: []
+      };
+    case 'finance_savings_goal':
+      return {
+        ...base,
+        data: {
+          name: record.name,
+          targetAmount: record.targetAmount || 0,
+          accountId: record.accountId || financeSettings().defaultAccountId,
+          startDate: record.startDate || todayISO(),
+          targetDate: record.targetDate || addMonthsISO(todayISO(), 6),
+          notes: record.notes || '',
+          linkedGoalId: '',
+          status: 'active',
+          color: record.color || '#35e0b5'
+        },
+        tags: []
+      };
+    case 'event':
+      return {
+        ...base,
+        data: {
+          title: record.title || record.name || '',
+          description: record.description || record.notes || '',
+          date: '',
+          time: record.time || '09:00',
+          repeat: record.repeat || 'once',
+          linkType: '',
+          linkId: ''
+        },
+        tags: []
+      };
+    default:
+      return { ...base, data: {} };
+  }
+}
+
 /* ---------------- إعادة الضبط / الاستيراد ---------------- */
 async function resetAllData() {
   await DB.clearAll();
@@ -1085,7 +1407,7 @@ async function resetAllData() {
     financeAccounts: [], financeCategories: [], financeTransactions: [],
     financeObligations: [], financeObligationPayments: [], financeDebts: [],
     financeDebtPayments: [], financeSavingsGoals: [], financeSavingsEntries: [],
-    financeBudgets: [], financeIncomeSchedules: [], financeAttachments: []
+    financeBudgets: [], financeIncomeSchedules: [], financeAttachments: [], templates: []
   };
   state.settings = { ...DEFAULT_SETTINGS };
   if (typeof normalizePrayerSettings === 'function') {

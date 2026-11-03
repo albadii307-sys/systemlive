@@ -2377,3 +2377,33 @@ textarea { resize: vertical; min-height: 76px; line-height: 1.7; }
   .finance-row-value { font-size: 11.5px; }
   .finance-kv { font-size: 11.5px; }
 }
+
+/* ========================= مكتبة القوالب ========================= */
+.template-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 13px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: rgba(148, 163, 184, 0.025);
+  margin-bottom: 8px;
+}
+.template-row-main { display: flex; align-items: center; gap: 9px; flex: 1; min-width: 0; }
+.template-row-icon { width: 32px; height: 32px; border-radius: 9px; display: grid; place-items: center; background: var(--blue-soft); color: var(--blue); flex: none; }
+.template-row-info { min-width: 0; }
+.template-row-title { font-size: 12.5px; font-weight: 600; color: var(--text); }
+.template-row-meta { color: var(--muted); font-size: 10px; margin-top: 1px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.template-row-desc { color: var(--muted-2); font-size: 10px; margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.template-row-actions { display: flex; gap: 2px; flex: none; }
+.template-row-actions .soft-btn, .template-row-actions .ghost-btn, .template-row-actions .danger-btn { padding: 6px; font-size: 11px; }
+
+.finance-row.compact { padding: 10px 13px; }
+.finance-row-actions { display: flex; gap: 2px; }
+
+.finance-safe { display: flex; align-items: flex-start; gap: 18px; flex-wrap: wrap; margin-top: 10px; }
+.finance-safe-amount { font-size: 26px; font-weight: 700; letter-spacing: -0.5px; }
+.finance-safe-meta { color: var(--muted); font-size: 11px; margin-top: 3px; }
+.finance-safe-pill { display: inline-flex; align-items: center; gap: 5px; padding: 4px 9px; border-radius: 8px; font-size: 11px; font-weight: 600; margin-top: 8px; }
+.finance-safe-pill.danger { background: var(--danger-soft); color: var(--danger); border: 1px solid rgba(255, 113, 133, 0.18); }
+.finance-safe-pill.green { background: var(--accent-soft); color: var(--accent); border: 1px solid rgba(53, 224, 181, 0.18); }

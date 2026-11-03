@@ -5,8 +5,8 @@
 'use strict';
 
 const DB_NAME = 'nizami_db';
-const DB_VERSION = 4;
-const SCHEMA_VERSION = 4;
+const DB_VERSION = 5;
+const SCHEMA_VERSION = 5;
 const FALLBACK_KEY = 'nizami_fallback_v1';
 
 const STORE_DEFS = {
@@ -209,6 +209,15 @@ const STORE_DEFS = {
       ['transactionId', 'transactionId', {}],
       ['addedAt', 'addedAt', {}]
     ]
+  },
+  templates: {
+    keyPath: 'id',
+    indexes: [
+      ['entityType', 'entityType', {}],
+      ['isFavorite', 'isFavorite', {}],
+      ['createdAt', 'createdAt', {}],
+      ['updatedAt', 'updatedAt', {}]
+    ]
   }
 };
 
@@ -232,7 +241,8 @@ const CAMEL_TO_STORE = {
   financeSavingsEntries: 'finance_savings_entries',
   financeBudgets: 'finance_budgets',
   financeIncomeSchedules: 'finance_income_schedules',
-  financeAttachments: 'finance_attachments'
+  financeAttachments: 'finance_attachments',
+  templates: 'templates'
 };
 const STORE_TO_CAMEL = {
   habit_logs: 'habitLogs',
@@ -252,12 +262,11 @@ const STORE_TO_CAMEL = {
   finance_savings_entries: 'financeSavingsEntries',
   finance_budgets: 'financeBudgets',
   finance_income_schedules: 'financeIncomeSchedules',
-  finance_attachments: 'financeAttachments'
+  finance_attachments: 'financeAttachments',
+  templates: 'templates'
 };
 
-// ملفات الصوت والمرفقات تُستثنى من النسخة الاحتياطية النصية (JSON) لأنها قد تكون كبيرة.
-// تُصدّر بياناتها الوصفية فقط، ويمكن إعادة تنزيلها أو رفعها لاحقًا.
-const BACKUP_EXCLUDED_STORES = new Set(['adhan_blobs', 'finance_attachments']);
+const BACKUP_EXCLUDED_STORES = new Set([]);
 
 /**
  * ترحيلات هيكل البيانات.
@@ -329,8 +338,20 @@ const DB_MIGRATIONS = [
         }
       }
     }
+  },
+  {
+    version: 5,
+    name: 'مكتبة القوالب والعناصر المحفوظة',
+    migrate(db, transaction) {
+      if (!db.objectStoreNames.contains('templates')) {
+        const store = db.createObjectStore('templates', { keyPath: 'id' });
+        for (const [indexName, keyPath, options] of STORE_DEFS.templates.indexes) {
+          store.createIndex(indexName, keyPath, options);
+        }
+      }
+    }
   }
-  // ترحيلات مستقبلية تُضاف هنا: { version: 5, migrate(db, tx) { ... } }
+  // ترحيلات مستقبلية تُضاف هنا: { version: 6, migrate(db, tx) { ... } }
 ];
 
 let dbHandle = null;
@@ -630,8 +651,24 @@ const DB = {
     await openDatabase();
     const stores = {};
     for (const name of STORE_NAMES) {
-      if (BACKUP_EXCLUDED_STORES.has(name)) continue;
-      stores[STORE_TO_CAMEL[name] || name] = await DB.getAll(name);
+      const records = await DB.getAll(name);
+      // تحويل ملفات Blob إلى base64 للتضمين في النسخة الاحتياطية
+      if (name === 'adhan_blobs' || name === 'finance_attachments') {
+        stores[name] = await Promise.all(records.map(async (record) => {
+          const serialized = { ...record };
+          if (record.blob && typeof Blob !== 'undefined' && record.blob instanceof Blob) {
+            serialized.blob = await blobToBase64(record.blob);
+            serialized.blobType = 'base64';
+          } else if (record.dataUrl) {
+            serialized.dataUrl = record.dataUrl;
+            serialized.blobType = 'dataurl';
+          }
+          delete serialized.blob;
+          return serialized;
+        }));
+      } else {
+        stores[name] = records;
+      }
     }
     return {
       app: 'نظامي',
@@ -643,8 +680,57 @@ const DB = {
   },
 
   /**
-   * استيراد نسخة احتياطية. يقبل صيغة التصدير الحالية
-   * وأي صيغة تحتوي على مصفوفات بأسماء المخازن (بما فيها camelCase).
+   * التحقق من سلامة ملف النسخة الاحتياطية قبل الاستيراد.
+   * يعيد تقريرًا أوليًا عن المحتوى دون تعديل البيانات الحالية.
+   */
+  async validateBackup(payload) {
+    if (!payload || typeof payload !== 'object') {
+      throw new Error('ملف النسخة الاحتياطية غير صالح');
+    }
+    const source = payload.stores || payload.data || payload;
+    const report = {
+      valid: false,
+      app: payload.app || '',
+      schemaVersion: payload.schemaVersion || null,
+      exportedAt: payload.exportedAt || null,
+      stores: {},
+      totalRecords: 0,
+      errors: []
+    };
+
+    if (payload.app && payload.app !== 'نظامي') {
+      report.errors.push('هذا الملف لا يبدو نسخة احتياطية من تطبيق نظامي');
+      return report;
+    }
+
+    let foundAny = false;
+    for (const name of STORE_NAMES) {
+      const camel = STORE_TO_CAMEL[name];
+      let records = source[name];
+      if (!Array.isArray(records) && camel && Array.isArray(source[camel])) records = source[camel];
+      if (Array.isArray(records)) {
+        foundAny = true;
+        const validRecords = records.filter((record) => record && typeof record === 'object');
+        report.stores[name] = {
+          count: validRecords.length,
+          total: records.length
+        };
+        report.totalRecords += validRecords.length;
+      }
+    }
+
+    if (!foundAny) {
+      report.errors.push('لم يتم العثور على بيانات صالحة في الملف');
+      return report;
+    }
+
+    report.valid = true;
+    return report;
+  },
+
+  /**
+   * استيراد نسخة احتياطية مع التحقق من سلامة الملف قبل حذف البيانات الحالية.
+   * لا تُمسح البيانات الحالية إلا بعد التأكد من صلاحية النسخة الاحتياطية.
    */
   async importData(payload, { replace = true } = {}) {
     await openDatabase();
@@ -652,6 +738,17 @@ const DB = {
       throw new Error('ملف النسخة الاحتياطية غير صالح');
     }
     const source = payload.stores || payload.data || payload;
+
+    // التحقق من التطبيق
+    if (payload.app && payload.app !== 'نظامي') {
+      throw new Error('هذا الملف لا يبدو نسخة احتياطية من تطبيق نظامي');
+    }
+
+    // التحقق من توافق الإصدار (نقبل الإصدارات نفسها أو الأقدم)
+    if (payload.schemaVersion && payload.schemaVersion > SCHEMA_VERSION) {
+      throw new Error(`إصدار النسخة الاحتياطية (${payload.schemaVersion}) أحدث من إصدار التطبيق الحالي (${SCHEMA_VERSION})`);
+    }
+
     const toImport = {};
     let foundAny = false;
 
@@ -661,41 +758,50 @@ const DB = {
       if (!Array.isArray(records) && camel && Array.isArray(source[camel])) records = source[camel];
       if (Array.isArray(records)) {
         foundAny = true;
-        toImport[name] = records.filter((record) => record && typeof record === 'object');
+        // تحويل base64 إلى Blob للمخازن الثنائية
+        const processed = await Promise.all(records.filter((record) => record && typeof record === 'object').map(async (record) => {
+          const r = { ...record };
+          if ((name === 'adhan_blobs' || name === 'finance_attachments') && r.blobType === 'base64' && r.blob) {
+            r.blob = await base64ToBlob(r.blob, r.type || 'application/octet-stream');
+          }
+          if (!r[STORE_DEFS[name].keyPath]) r[STORE_DEFS[name].keyPath] = uid(name.slice(0, 2));
+          return r;
+        }));
+        toImport[name] = processed;
       }
     }
 
     if (!foundAny) throw new Error('لم يتم العثور على بيانات صالحة في الملف');
-    if (payload.app && payload.app !== 'نظامي') {
-      throw new Error('هذا الملف لا يبدو نسخة احتياطية من تطبيق نظامي');
-    }
 
     if (dbMode === 'fallback') {
       const data = loadFallbackData();
       if (replace) {
         for (const name of STORE_NAMES) {
-          if (!BACKUP_EXCLUDED_STORES.has(name)) data[name] = [];
+          data[name] = [];
         }
       }
       for (const [name, records] of Object.entries(toImport)) {
         const keyPath = STORE_DEFS[name].keyPath;
         for (const record of records) {
-          if (!record[keyPath]) record[keyPath] = uid(name.slice(0, 2));
           const index = data[name].findIndex((r) => r[keyPath] === record[keyPath]);
           if (index >= 0) data[name][index] = record;
           else data[name].push(record);
         }
       }
       persistFallback();
-      return { imported: Object.fromEntries(Object.entries(toImport).map(([k, v]) => [k, v.length])) };
+      return { imported: Object.fromEntries(Object.entries(toImport).map(([k, v]) => [k, v.length])), report: await this.validateBackup(payload) };
     }
 
+    // المعاملة الذرية: لا تُمسح البيانات الحالية إلا بعد التحقق من الصلاحية
+    // يتم الحذف والإدخال ضمن معاملة واحدة لكل المخازن
     await runMultiTransaction(STORE_NAMES, 'readwrite', (transaction) => {
-      for (const name of STORE_NAMES) {
-        if (BACKUP_EXCLUDED_STORES.has(name)) continue;
+      if (replace) {
+        for (const name of STORE_NAMES) {
+          transaction.objectStore(name).clear();
+        }
+      }
+      for (const [name, records] of Object.entries(toImport)) {
         const store = transaction.objectStore(name);
-        if (replace) store.clear();
-        const records = toImport[name] || [];
         const keyPath = STORE_DEFS[name].keyPath;
         for (const record of records) {
           if (!record[keyPath]) record[keyPath] = uid(name.slice(0, 2));
@@ -704,7 +810,7 @@ const DB = {
       }
     });
 
-    return { imported: Object.fromEntries(Object.entries(toImport).map(([k, v]) => [k, v.length])) };
+    return { imported: Object.fromEntries(Object.entries(toImport).map(([k, v]) => [k, v.length])), report: await this.validateBackup(payload) };
   },
 
   async storageEstimate() {
@@ -714,8 +820,67 @@ const DB = {
       }
     } catch {}
     return null;
+  },
+
+  /**
+   * تنفيذ عمليات متعددة عبر مخازن مختلفة في معاملة واحدة (ذرة).
+   * جميع العمليات تنجح معًا أو تُلغى معًا عند الفشل.
+   * العمليات: { store, type: 'put'|'delete', record } أو { store, type: 'delete', key }
+   */
+  async multiTransaction(operations) {
+    if (!operations.length) return;
+    await openDatabase();
+    if (dbMode === 'fallback') {
+      // في التخزين البديل، نُنفذ 순차يًا (بدون تراجع حقيقي لكن البيانات آمنة)
+      const data = loadFallbackData();
+      for (const op of operations) {
+        const keyPath = STORE_DEFS[op.store].keyPath;
+        if (op.type === 'put') {
+          const index = data[op.store].findIndex((r) => r[keyPath] === op.record[keyPath]);
+          if (index >= 0) data[op.store][index] = { ...op.record };
+          else data[op.store].push({ ...op.record });
+        } else if (op.type === 'delete') {
+          const key = op.key !== undefined ? op.key : op.record[keyPath];
+          data[op.store] = data[op.store].filter((r) => r[keyPath] !== key);
+        }
+      }
+      persistFallback();
+      return;
+    }
+    const storeNames = [...new Set(operations.map((op) => op.store))];
+    return runMultiTransaction(storeNames, 'readwrite', (transaction) => {
+      for (const op of operations) {
+        const store = transaction.objectStore(op.store);
+        if (op.type === 'put') {
+          store.put(op.record);
+        } else if (op.type === 'delete') {
+          const key = op.key !== undefined ? op.key : op.record[STORE_DEFS[op.store].keyPath];
+          store.delete(key);
+        }
+      }
+    });
   }
 };
+
+/* ---------------- تحويل الملفات الثنائية للنسخ الاحتياطي ---------------- */
+
+function blobToBase64(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(new Error('تعذر قراءة الملف الثنائي'));
+    reader.readAsDataURL(blob);
+  });
+}
+
+function base64ToBlob(dataUrl, contentType = '') {
+  const [header, data] = String(dataUrl).split(',');
+  const byteString = atob(data);
+  const ab = new ArrayBuffer(byteString.length);
+  const ia = new Uint8Array(ab);
+  for (let i = 0; i < byteString.length; i += 1) ia[i] = byteString.charCodeAt(i);
+  return new Blob([ab], { type: contentType });
+}
 
 /* ---------------- ترحيل بيانات قديمة (إن وُجدت) ---------------- */
 /**

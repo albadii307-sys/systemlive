@@ -164,6 +164,7 @@ function renderFinanceDashboard(data) {
           <div class="finance-safe-pill ${ds.safe.raw < 0 ? 'danger' : 'green'}">${ds.safe.raw < 0 ? 'عجز متوقع' : 'كفاية متوقعة'}</div>
         </div>
         ${ds.upcoming.length ? `<div class="finance-subtitle mt-3">الالتزامات القادمة</div><div class="finance-list">${ds.upcoming.map(({ obligation, info }) => financeRow({ iconName: 'bell', title: obligation.name, meta: `${relativeDateLabel(info.dueDate)} · ${info.statusLabel}`, value: financeIsMasked() ? '••••' : money(info.remainingDue), tone: info.tone === 'danger' ? 'danger' : info.tone === 'warning' ? 'warning' : '', action: 'finance-obligation-detail', id: obligation.id })).join('')}</div>` : ''}
+        ${ds.safe.overdueObligations.length ? `<div class="finance-subtitle mt-3" style="color:var(--danger)">الالتزامات المتأخرة (تُحسب في المبلغ الآمن)</div><div class="finance-list">${ds.safe.overdueObligations.map(({ obligation, info }) => financeRow({ iconName: 'alert', title: obligation.name, meta: `متأخر منذ ${Math.abs(info.days)} يومًا`, value: financeIsMasked() ? '••••' : money(info.remainingDue), tone: 'danger', action: 'finance-obligation-detail', id: obligation.id })).join('')}</div>` : ''}
       </div>
     </div>
   `;
@@ -416,6 +417,168 @@ function renderFinanceBudgets() {
   `;
 }
 
+/* ---------------- تبويب مصادر الدخل ---------------- */
+function renderFinanceIncomeSources() {
+  const schedules = financeSchedules('all').sort((a, b) => a.createdAt - b.createdAt);
+  const today = todayISO();
+
+  const rows = schedules.length ? schedules.map((schedule) => {
+    const nextDate = financeScheduleNextDate(schedule, today);
+    const isDue = nextDate <= today;
+    const lastReceived = schedule.lastReceivedAt ? formatDateShort(schedule.lastReceivedAt) : 'لم يستلم بعد';
+    return `
+      <div class="finance-row compact">
+        <div class="finance-row-icon ${isDue ? 'warning' : 'blue'}">${icon('arrow-down-left', 14)}</div>
+        <div class="finance-row-main">
+          <div class="finance-row-title">${escapeHtml(schedule.name)} ${!schedule.enabled ? ' <span class="pill muted">متوقف</span>' : ''}</div>
+          <div class="finance-row-meta">${FINANCE_INCOME_KINDS[schedule.incomeKind || 'salary'] || 'راتب'} · ${FINANCE_RECURRENCE[schedule.recurrence || 'monthly'] || 'شهريًا'} ·次日 الاستحقاق: ${formatDateShort(nextDate)}${isDue ? ' · مستحق' : ''}</div>
+        </div>
+        <div class="finance-row-value">${financeIsMasked() ? '••••' : money(schedule.amount)}</div>
+        <div class="finance-row-actions">
+          <button class="soft-btn small" data-action="finance-receive-income" data-id="${schedule.id}" ${!schedule.enabled ? 'disabled' : ''}>${icon('check', 12)} استلام</button>
+          <button class="ghost-btn small" data-action="finance-edit-income-source" data-id="${schedule.id}">${icon('edit', 12)}</button>
+          <button class="${schedule.enabled ? 'soft-btn' : 'ghost-btn'} small" data-action="finance-toggle-income-source" data-id="${schedule.id}">${schedule.enabled ? icon('pause', 12) : icon('play', 12)}</button>
+          <button class="danger-btn small" data-action="finance-delete-income-source" data-id="${schedule.id}">${icon('trash', 12)}</button>
+        </div>
+      </div>
+    `;
+  }).join('') : '<div class="empty-state"><div class="empty-icon">'+icon('arrow-down-left', 20)+'</div><h4>لا توجد مصادر دخل</h4><p>أضف راتبًا أو مصدر دخل لتتبع الاستحقاقات القادمة</p></div>';
+
+  return `
+    <div class="view-fade">
+      ${pageHead('مصادر الدخل', 'الرواتب والدخل المتكرر والمتوقع', `<button class="primary-btn" data-action="finance-add-income-source">${icon('plus', 15)} إضافة مصدر دخل</button>`)}
+      <div class="card"><div class="card-body">${rows}</div></div>
+      <div class="help mt-3">الدخل المتوقع لا يُحتسب كرصيد فعلي حتى يتم تسجيل استلامه. كل استلام يُنشئ معاملة دخل مستقلة.</div>
+    </div>
+  `;
+}
+
+function openFinanceIncomeSourceModal(id = null) {
+  const schedule = id ? state.data.financeIncomeSchedules.find((item) => item.id === id) : null;
+  const data = schedule || {
+    name: '',
+    amount: '',
+    accountId: financeSettings().defaultAccountId,
+    dayOfMonth: 1,
+    categoryId: 'cat_inc_salary',
+    incomeKind: 'salary',
+    source: '',
+    enabled: true,
+    lastReceivedAt: ''
+  };
+  const content = `
+    <form id="finance-income-source-form" data-fin-form="income-source" data-id="${schedule?.id || ''}">
+      <div class="form-grid">
+        <div class="field full">
+          <label for="fin-is-name">اسم مصدر الدخل <span class="req">*</span></label>
+          <input id="fin-is-name" name="name" type="text" maxlength="120" value="${escapeAttr(data.name)}" placeholder="راتب شهري، عمل حر، إيجارات..." required>
+        </div>
+        <div class="field">
+          <label for="fin-is-type">نوع الدخل</label>
+          <select id="fin-is-type" name="incomeKind">
+            ${Object.entries(FINANCE_INCOME_KINDS).map(([k, l]) => `<option value="${k}" ${data.incomeKind === k ? 'selected' : ''}>${l}</option>`).join('')}
+          </select>
+        </div>
+        <div class="field">
+          <label for="fin-is-amount">المبلغ المتوقع <span class="req">*</span></label>
+          <input id="fin-is-amount" name="amount" type="number" min="0.001" step="0.001" value="${escapeAttr(data.amount || '')}" required>
+        </div>
+        <div class="field">
+          <label for="fin-is-account">الحساب المستلم</label>
+          ${financeAccountSelect('fin-is-account', data.accountId, false, 'all', 'accountId')}
+        </div>
+        <div class="field">
+          <label for="fin-is-day">يوم الاستحقاق (1–28)</label>
+          <input id="fin-is-day" name="dayOfMonth" type="number" min="1" max="28" value="${escapeAttr(data.dayOfMonth || 1)}">
+          <span class="help">يتم حساب تاريخ الاستحقاق تلقائيًا كل دورة</span>
+        </div>
+        <div class="field">
+          <label for="fin-is-recurrence">الدورية</label>
+          <select id="fin-is-recurrence" name="recurrence">
+            ${Object.entries(FINANCE_RECURRENCE).map(([k, l]) => `<option value="${k}" ${data.recurrence === k ? 'selected' : ''}>${l}</option>`).join('')}
+          </select>
+        </div>
+        <div class="field">
+          <label for="fin-is-category">تصنيف الدخل</label>
+          ${financeCategorySelect('fin-is-category', 'income', data.categoryId, true, 'categoryId')}
+        </div>
+        <div class="field full">
+          <label for="fin-is-source">المصدر / الجهة</label>
+          <input id="fin-is-source" name="source" type="text" maxlength="120" value="${escapeAttr(data.source || '')}" placeholder="اسم الشركة أو العميل">
+        </div>
+        ${schedule ? `
+        <div class="field full">
+          <label class="row" style="cursor:pointer;font-size:12px">
+            <input type="checkbox" name="enabled" ${data.enabled !== false ? 'checked' : ''}>
+            <span>${data.enabled ? 'إيقاف مؤقتًا' : 'تفعيل المصدر'}</span>
+          </label>
+          <span class="help">آخر استلام: ${schedule.lastReceivedAt ? formatDateLong(schedule.lastReceivedAt) : 'لم يتم الاستلام بعد'}</span>
+        </div>
+        ` : ''}
+        <div class="field full">
+          <label for="fin-is-notes">ملاحظات</label>
+          <textarea id="fin-is-notes" name="notes" maxlength="500">${escapeHtml(data.notes || '')}</textarea>
+        </div>
+      </div>
+    </form>
+  `;
+  openModal({
+    title: schedule ? 'تعديل مصدر دخل' : 'مصدر دخل جديد',
+    subtitle: 'حدد المبلغ والدورية والحساب الذي يستلم الدخل',
+    size: 'lg',
+    content,
+    footer: `
+      <button class="ghost-btn" data-modal-close>إلغاء</button>
+      <div class="spacer"></div>
+      <button class="primary-btn" type="submit" form="finance-income-source-form">${icon('check', 15)} ${schedule ? 'حفظ' : 'إضافة المصدر'}</button>
+    `
+  });
+}
+
+function openReceiveIncomeModal(scheduleId) {
+  const schedule = state.data.financeIncomeSchedules.find((item) => item.id === scheduleId);
+  if (!schedule) return;
+  const nextDate = financeScheduleNextDate(schedule, todayISO());
+  const content = `
+    <form id="finance-receive-income-form" data-fin-form="receive-income" data-id="${schedule.id}">
+      <div class="banner"><span class="banner-icon">${icon('arrow-down-left', 16)}</span><div><strong>${escapeHtml(schedule.name)}</strong><p>المبلغ المتوقع: ${money(schedule.amount)} · تاريخ الاستحقاق المتوقع: ${formatDateLong(nextDate)}</p></div></div>
+      <div class="form-grid mt-2">
+        <div class="field full">
+          <label for="fin-recv-amount">المبلغ المستلم <span class="req">*</span></label>
+          <input id="fin-recv-amount" name="amount" type="number" min="0.001" step="0.001" value="${schedule.amount}" required autofocus>
+        </div>
+        <div class="field">
+          <label for="fin-recv-account">الحساب <span class="req">*</span></label>
+          ${financeAccountSelect('fin-recv-account', schedule.accountId, false, 'all', 'accountId')}
+        </div>
+        <div class="field">
+          <label for="fin-recv-date">تاريخ الاستلام <span class="req">*</span></label>
+          <input id="fin-recv-date" name="date" type="date" value="${nextDate}" required>
+        </div>
+        <div class="field">
+          <label for="fin-recv-time">الوقت</label>
+          <input id="fin-recv-time" name="time" type="time" value="${nowHHMM()}">
+        </div>
+        <div class="field full">
+          <label for="fin-recv-notes">ملاحظات</label>
+          <textarea id="fin-recv-notes" name="notes" maxlength="500"></textarea>
+        </div>
+      </div>
+    </form>
+  `;
+  openModal({
+    title: `تسجيل استلام: ${schedule.name}`,
+    subtitle: 'سيُنشأ معاملة دخل فعلية ويُحدّث آخر استلام للمصدر',
+    size: 'lg',
+    content,
+    footer: `
+      <button class="ghost-btn" data-modal-close>إلغاء</button>
+      <div class="spacer"></div>
+      <button class="primary-btn" type="submit" form="finance-receive-income-form">${icon('check', 15)} تسجيل الاستلام</button>
+    `
+  });
+}
+
 /* ---------------- تبويب التقارير ---------------- */
 function renderFinanceReports() {
   const scope = 'all';
@@ -510,6 +673,15 @@ function renderFinanceSettings() {
           </div>
         </div>
         <div class="card">
+          <div class="card-head"><div><div class="card-title">مصادر الدخل</div></div></div>
+          <div class="card-body">
+            ${state.data.financeIncomeSchedules.length ? state.data.financeIncomeSchedules.map((s) => `
+              <div class="finance-kv"><span>${escapeHtml(s.name)}</span><span>${money(s.amount)} · ${FINANCE_RECURRENCE[s.recurrence || 'monthly']}</span></div>
+            `).join('') : '<p class="text-muted small-text">لا توجد مصادر دخل محددة.</p>'}
+            <div class="row wrap mt-2"><button class="soft-btn" data-action="finance-add-income-source">${icon('plus', 13)} إضافة مصدر</button></div>
+          </div>
+        </div>
+        <div class="card">
           <div class="card-head"><div><div class="card-title">عام</div></div></div>
           <div class="card-body">
             <div class="finance-kv"><span>العملة</span><strong>${settings.currency}</strong></div>
@@ -535,7 +707,7 @@ function renderFinanceSettings() {
           </div>
         </div>
       </div>
-      <p class="help mt-3">تنبيه: قفل PIN هو قفل واجهة فقط، وليس تشفيرًا كاملًا للبيانات. المرفقات محفوظة محليًا. ملف النسخة الاحتياطية يُستبعد مرفقات الصور الكبيرة حسب سياسة التطبيق.</p>
+      <p class="help mt-3">تنبيه: قفل PIN هو قفل واجهة فقط، وليس تشفيرًا كاملًا للبيانات. المرفقات محفوظة محليًا. يتم تضمين جميع الملفات (بما في ذلك صور الفواتير وأصوات الأذان) في النسخة الاحتياطية الآن.</p>
     </div>
   `;
 }
@@ -631,6 +803,7 @@ function renderFinance() {
   else if (tab === 'savings') dom.view.innerHTML = renderFinanceSavings();
   else if (tab === 'budgets') dom.view.innerHTML = renderFinanceBudgets();
   else if (tab === 'reports') dom.view.innerHTML = renderFinanceReports();
+  else if (tab === 'income-sources') dom.view.innerHTML = renderFinanceIncomeSources();
   else if (tab === 'settings') dom.view.innerHTML = renderFinanceSettings();
   else dom.view.innerHTML = renderFinanceDashboard();
 
@@ -645,6 +818,7 @@ function renderFinance() {
     <button class="finance-tab ${tab === 'savings' ? 'active' : ''}" data-action="finance-tab" data-tab="savings">${icon('piggy-bank', 14)} ادخار</button>
     <button class="finance-tab ${tab === 'budgets' ? 'active' : ''}" data-action="finance-tab" data-tab="budgets">${icon('chart', 14)} ميزانيات</button>
     <button class="finance-tab ${tab === 'reports' ? 'active' : ''}" data-action="finance-tab" data-tab="reports">${icon('file-text', 14)} تقارير</button>
+    <button class="finance-tab ${tab === 'income-sources' ? 'active' : ''}" data-action="finance-tab" data-tab="income-sources">${icon('arrow-down-left', 14)} مصادر دخل</button>
     <button class="finance-tab ${tab === 'settings' ? 'active' : ''}" data-action="finance-tab" data-tab="settings">${icon('sliders', 14)} إعدادات</button>
   `;
   const view = dom.view;
@@ -706,6 +880,23 @@ function bindFinanceEvents() {
     if (action === 'finance-add-debt') { openFinanceDebtModal(); return; }
     if (action === 'finance-add-goal') { openFinanceSavingsGoalModal(); return; }
     if (action === 'finance-add-budget') { openFinanceBudgetModal(); return; }
+    if (action === 'finance-add-income-source') { openFinanceIncomeSourceModal(); return; }
+    if (action === 'finance-edit-income-source') { closeAllModals(); openFinanceIncomeSourceModal(id); return; }
+    if (action === 'finance-toggle-income-source') {
+      const schedule = state.data.financeIncomeSchedules.find((item) => item.id === id);
+      if (schedule) {
+        saveFinanceIncomeSource({ ...schedule, enabled: !schedule.enabled });
+        renderFinance();
+        showToast({ title: schedule.enabled ? 'تم إيقاف مصدر الدخل' : 'تم تفعيل مصدر الدخل' });
+      }
+      return;
+    }
+    if (action === 'finance-delete-income-source') {
+      const ok = await confirmAction({ title: 'حذف مصدر الدخل؟', message: 'سيُحذف هذا المصدر وجدوله المتوقع.', confirmText: 'حذف', danger: true });
+      if (ok) { await deleteFinanceIncomeSchedule(id); renderFinance(); showToast({ title: 'تم الحذف' }); }
+      return;
+    }
+    if (action === 'finance-receive-income') { closeAllModals(); openReceiveIncomeModal(id); return; }
     if (action === 'finance-set-pin') { openFinanceSetPinModal(); return; }
     if (action === 'finance-change-pin') { openFinanceSetPinModal({ change: true }); return; }
     if (action === 'finance-disable-pin') { openFinanceDisablePinModal(); return; }
@@ -1537,6 +1728,53 @@ async function handleFinanceFormSubmit(form) {
     closeAllModals();
     renderFinance();
     showToast({ title: id ? 'تم تحديث الدخل' : 'تم تسجيل الدخل', message: 'الدخل المستقبلي لا يُحتسب حتى تسجيل الاستلام' });
+    return;
+  }
+
+  if (type === 'income-source') {
+    const input = {
+      id: id || undefined,
+      name: fd.get('name'),
+      amount: fd.get('amount'),
+      accountId: fd.get('accountId'),
+      dayOfMonth: fd.get('dayOfMonth'),
+      categoryId: fd.get('categoryId'),
+      incomeKind: fd.get('incomeKind'),
+      source: fd.get('source'),
+      recurrence: fd.get('recurrence'),
+      enabled: fd.get('enabled') !== 'off',
+      notes: fd.get('notes')
+    };
+    if (id) await saveFinanceIncomeSchedule(input);
+    else await saveFinanceIncomeSchedule(input);
+    closeAllModals();
+    renderFinance();
+    showToast({ title: id ? 'تم تحديث مصدر الدخل' : 'تمت إضافة مصدر الدخل' });
+    return;
+  }
+
+  if (type === 'receive-income') {
+    const scheduleId = form.dataset.id;
+    const input = {
+      amount: fd.get('amount'),
+      accountId: fd.get('accountId'),
+      categoryId: fd.get('categoryId') || 'cat_inc_salary',
+      incomeKind: 'salary',
+      date: fd.get('date'),
+      time: fd.get('time'),
+      counterparty: fd.get('counterparty') || '',
+      notes: fd.get('notes'),
+      scheduleId: scheduleId || ''
+    };
+    await createFinanceIncome(input);
+    // تحديث آخر استلام للجدول
+    const schedule = state.data.financeIncomeSchedules.find((item) => item.id === scheduleId);
+    if (schedule) {
+      await saveFinanceIncomeSchedule({ ...schedule, lastReceivedAt: fd.get('date') });
+    }
+    closeAllModals();
+    renderFinance();
+    showToast({ title: 'تم تسجيل الاستلام', message: 'تم إنشاء معاملة دخل فعالة وتحديث جدول المصدر' });
     return;
   }
 
